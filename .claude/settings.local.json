@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(curl -s http://localhost:5173)",
+      "Bash(timeout 8 npx vite build)",
+      "Bash(curl -s http://localhost:5175/login)",
+      "Bash(curl -s http://localhost:5175/)",
+      "WebFetch(domain:www.figma.com)",
+      "Bash(npx vite *)",
+      "Bash(npx eslint *)"
+    ]
+  }
+}
