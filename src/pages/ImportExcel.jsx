@@ -1,5 +1,5 @@
 import { useState, useRef, useMemo } from 'react'
-import { CloudUpload, FolderOpen, CheckCircle, AlertCircle, ChevronDown } from 'lucide-react'
+import { CloudUpload, FolderOpen, CheckCircle, AlertCircle, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import Navbar from '../components/Navbar'
 import AccountSettings from '../components/AccountSettings'
 import rawSchedule from '../data/scheduleData.json'
@@ -54,6 +54,7 @@ export default function ImportExcel() {
     [...new Set(ALL_CLASSES.map(s => s.floor))].sort((a, b) => a - b)[0]
   )
   const [activeRoom, setActiveRoom] = useState(null)
+  const [minutesBefore, setMinutesBefore] = useState(0)
   const fileRef = useRef()
 
   const floors = useMemo(() =>
@@ -206,6 +207,36 @@ export default function ImportExcel() {
             <span className="text-sm text-gray-500 py-2">
               <span className="font-semibold text-gray-800">{visibleClasses.length}</span> classes this week
             </span>
+          </div>
+
+          {/* Start Time carousel */}
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[11px] font-semibold text-gray-400 tracking-widest uppercase">Start Time:</span>
+            <div className="flex items-center gap-1.5 border border-gray-200 rounded-xl px-2 py-1.5 bg-white">
+              <button
+                onClick={() => setMinutesBefore(m => Math.max(0, m - 5))}
+                className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                <ChevronLeft size={15} />
+              </button>
+              <span className="text-sm text-gray-400 w-6 text-center select-none">
+                {minutesBefore > 0 ? minutesBefore - 5 : 0}
+              </span>
+              <div className="px-4 py-1 rounded-lg bg-pink-100 min-w-[64px] text-center">
+                <span className="text-sm font-bold" style={{ color: '#E91E8C' }}>
+                  {minutesBefore} min
+                </span>
+              </div>
+              <span className="text-sm text-gray-400 w-6 text-center select-none">
+                {minutesBefore < 20 ? minutesBefore + 5 : 20}
+              </span>
+              <button
+                onClick={() => setMinutesBefore(m => Math.min(20, m + 5))}
+                className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                <ChevronRight size={15} />
+              </button>
+            </div>
           </div>
         </div>
 
