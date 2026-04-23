@@ -13,7 +13,6 @@ const navItems = [
 export default function Navbar({ onOpenAccount }) {
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const { user, logout } = useAuth()
-  const isAdmin = user?.role === 'admin'
   const { toast } = useToast()
   const navigate = useNavigate()
 
@@ -39,19 +38,19 @@ export default function Navbar({ onOpenAccount }) {
 
       {/* Nav links */}
       <div className="flex-1 flex items-center justify-center gap-8">
-        {navItems.map(({ to, label, icon: Icon, end }, idx) => (
+        {navItems.map((item, idx) => (
           <NavLink
-            key={`${to}-${idx}`}
-            to={to}
-            end={end}
+            key={`${item.to}-${idx}`}
+            to={item.to}
+            end={item.end}
             className={({ isActive }) =>
               `flex items-center gap-1.5 text-sm font-medium pb-0.5 border-b-2 transition-colors ${
                 isActive ? 'border-[#E91E8C] text-[#E91E8C]' : 'border-transparent text-gray-500 hover:text-gray-700'
               }`
             }
           >
-            <Icon size={16} />
-            {label}
+            <item.icon size={16} />
+            {item.label}
           </NavLink>
         ))}
       </div>
