@@ -10,7 +10,7 @@ export default function ConfirmModal({ isOpen, title, message, onConfirm, onCanc
             onClick={onCancel}
             className="flex-1 py-2.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 text-sm font-medium transition-colors"
           >
-            Cancel
+            ยกเลิก
           </button>
           <button
             onClick={onConfirm}

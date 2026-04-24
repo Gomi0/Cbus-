@@ -11,6 +11,12 @@ const STATUS_STYLE = {
   Rejected: 'bg-red-100 text-red-500',
 }
 
+const STATUS_LABEL = {
+  Booked:   'ยืนยันแล้ว',
+  Pending:  'รอดำเนินการ',
+  Rejected: 'ปฏิเสธ',
+}
+
 const ITEMS_PER_PAGE = 7
 
 export default function CheckReserved() {
@@ -49,17 +55,17 @@ export default function CheckReserved() {
       <Navbar onOpenAccount={() => setAccountOpen(true)} />
 
       <div className="max-w-7xl mx-auto px-8 py-8">
-        <h1 className="text-4xl font-bold text-gray-900 mb-6">Available Rooms</h1>
+        <h1 className="text-4xl font-bold text-gray-900 mb-6">รายการจองห้อง</h1>
 
         {/* Toolbar */}
         <div className="flex items-center justify-between mb-4">
           {/* View toggle */}
           <div className="flex items-center gap-0.5">
             <button className="flex items-center gap-1.5 border border-gray-200 rounded-full px-4 py-2 text-sm text-gray-700 bg-white shadow-sm">
-              <List size={14} /> List
+              <List size={14} /> รายการ
             </button>
             <button className="flex items-center gap-1.5 px-4 py-2 text-sm text-gray-400 hover:text-gray-600">
-              Table <LayoutGrid size={14} />
+              ตาราง <LayoutGrid size={14} />
             </button>
           </div>
 
@@ -72,7 +78,7 @@ export default function CheckReserved() {
                   autoFocus
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
-                  placeholder="Search..."
+                  placeholder="ค้นหา..."
                   className="text-sm outline-none w-28 text-gray-700"
                   onBlur={() => { if (!searchQuery) setSearchActive(false) }}
                 />
@@ -97,7 +103,7 @@ export default function CheckReserved() {
             </div>
 
             <button className="flex items-center gap-2 border border-gray-200 rounded-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
-              All Room <span className="text-gray-400 text-xs">▾</span>
+              ห้องทั้งหมด <span className="text-gray-400 text-xs">▾</span>
             </button>
           </div>
         </div>
@@ -108,18 +114,18 @@ export default function CheckReserved() {
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="w-14 px-5 py-4" />
-                <th className="text-left px-5 py-4 font-semibold text-gray-700">User</th>
-                <th className="text-left px-5 py-4 font-semibold text-gray-700">Date</th>
-                <th className="text-left px-5 py-4 font-semibold text-gray-700">Time</th>
-                <th className="text-left px-5 py-4 font-semibold text-gray-700">Room</th>
-                <th className="text-left px-5 py-4 font-semibold text-gray-700">Status</th>
-                <th className="text-left px-5 py-4 font-semibold text-gray-700">Action</th>
+                <th className="text-left px-5 py-4 font-semibold text-gray-700">ผู้ใช้</th>
+                <th className="text-left px-5 py-4 font-semibold text-gray-700">วันที่</th>
+                <th className="text-left px-5 py-4 font-semibold text-gray-700">เวลา</th>
+                <th className="text-left px-5 py-4 font-semibold text-gray-700">ห้อง</th>
+                <th className="text-left px-5 py-4 font-semibold text-gray-700">สถานะ</th>
+                <th className="text-left px-5 py-4 font-semibold text-gray-700">จัดการ</th>
               </tr>
             </thead>
             <tbody>
               {paginated.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-16 text-gray-400">No reservations found</td>
+                  <td colSpan={7} className="text-center py-16 text-gray-400">ไม่พบรายการจอง</td>
                 </tr>
               ) : (
                 paginated.map(r => (
@@ -138,7 +144,7 @@ export default function CheckReserved() {
                     <td className="px-5 py-5 text-gray-600">{r.room}</td>
                     <td className="px-5 py-5">
                       <span className={`inline-flex px-3 py-1 rounded-full text-xs font-medium ${STATUS_STYLE[r.status] || 'bg-gray-100 text-gray-600'}`}>
-                        {r.status}
+                        {STATUS_LABEL[r.status] || r.status}
                       </span>
                     </td>
                     <td className="px-5 py-5">
@@ -160,10 +166,10 @@ export default function CheckReserved() {
 
         {/* Footer */}
         <div className="flex items-center justify-between mt-4">
-          <p className="text-sm text-gray-400">Showing 1–{paginated.length} of 245 entries</p>
+          <p className="text-sm text-gray-400">แสดง 1–{paginated.length} จาก 245 รายการ</p>
           <div className="flex items-center gap-1">
             <button className="px-3 py-1.5 text-sm text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50">
-              ‹ Previous
+              ‹ ก่อนหน้า
             </button>
             {[1, 2, 3].map(p => (
               <button
@@ -180,7 +186,7 @@ export default function CheckReserved() {
               8
             </button>
             <button className="px-3 py-1.5 text-sm text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50">
-              Next ›
+              ถัดไป ›
             </button>
           </div>
         </div>
@@ -192,18 +198,18 @@ export default function CheckReserved() {
           <button onClick={() => setSelected([])} className="text-gray-400 hover:text-gray-600 transition">
             <X size={16} />
           </button>
-          <span className="text-sm text-gray-700 font-medium">{selected.length} selected</span>
+          <span className="text-sm text-gray-700 font-medium">เลือก {selected.length} รายการ</span>
           <button onClick={handleDeleteSelected} className="flex items-center gap-1.5 text-sm font-medium text-red-500 hover:text-red-700 transition">
-            <Trash2 size={14} /> Delete
+            <Trash2 size={14} /> ลบ
           </button>
         </div>
       )}
 
       <ConfirmModal
         isOpen={!!deleteTarget}
-        title="Delete Reservation"
-        message={`Delete booking for ${deleteTarget?.user} in room ${deleteTarget?.room}?`}
-        confirmLabel="Delete"
+        title="ลบการจอง"
+        message={`ลบการจองของ ${deleteTarget?.user} ในห้อง ${deleteTarget?.room}?`}
+        confirmLabel="ลบ"
         danger={true}
         onConfirm={handleDeleteOne}
         onCancel={() => setDeleteTarget(null)}

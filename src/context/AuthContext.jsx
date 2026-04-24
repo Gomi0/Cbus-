@@ -43,7 +43,7 @@ export function AuthProvider({ children }) {
     await new Promise(r => setTimeout(r, 700))
     const users = getUsers()
     const found = users.find(u => u.email === email && u.password === password)
-    if (!found) return { success: false, error: 'Email or password is incorrect' }
+    if (!found) return { success: false, error: 'อีเมลหรือรหัสผ่านไม่ถูกต้อง' }
     const { password: _, ...userData } = found
     setUser(userData)
     localStorage.setItem(SESSION_KEY, JSON.stringify(userData))
@@ -53,7 +53,7 @@ export function AuthProvider({ children }) {
   const register = useCallback(async ({ firstName, lastName, email, password }) => {
     await new Promise(r => setTimeout(r, 700))
     const users = getUsers()
-    if (users.find(u => u.email === email)) return { success: false, error: 'Email already in use' }
+    if (users.find(u => u.email === email)) return { success: false, error: 'อีเมลนี้ถูกใช้งานแล้ว' }
     const newUser = { id: Date.now(), firstName, lastName, email, phone: '', password, avatar: null, role: 'user' }
     const updated = [...users, newUser]
     saveUsers(updated)
@@ -71,7 +71,7 @@ export function AuthProvider({ children }) {
   const forgotPassword = useCallback(async (email) => {
     await new Promise(r => setTimeout(r, 700))
     const users = getUsers()
-    if (!users.find(u => u.email === email)) return { success: false, error: 'Email not found' }
+    if (!users.find(u => u.email === email)) return { success: false, error: 'ไม่พบอีเมลนี้ในระบบ' }
     return { success: true }
   }, [])
 

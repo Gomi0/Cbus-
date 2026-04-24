@@ -52,12 +52,12 @@ export default function Login() {
     if (tab === 'signin') {
       const result = await login(email, password)
       setLoading(false)
-      if (result.success) { toast.success('Login successful'); navigate('/dashboard') }
+      if (result.success) { toast.success('เข้าสู่ระบบสำเร็จ'); navigate('/dashboard') }
       else setError(result.error)
     } else {
       const result = await register({ firstName, lastName, email, password })
       setLoading(false)
-      if (result.success) { toast.success('Account created successfully'); navigate('/dashboard') }
+      if (result.success) { toast.success('สร้างบัญชีสำเร็จ'); navigate('/dashboard') }
       else setError(result.error)
     }
   }
@@ -72,7 +72,7 @@ export default function Login() {
 
         <div className="flex-1 flex flex-col justify-center py-6">
           <h1 className="text-4xl font-bold text-gray-900 text-center mb-7">
-            {tab === 'signin' ? 'Hello Welcome' : 'Welcome To Book Room'}
+            {tab === 'signin' ? 'สวัสดี ยินดีต้อนรับ' : 'ยินดีต้อนรับสู่การจองห้อง'}
           </h1>
 
           {/* Tab switcher */}
@@ -82,14 +82,14 @@ export default function Login() {
               onClick={() => switchTab('signin')}
               className={`flex-1 py-2.5 rounded-full text-sm font-medium transition-all ${tab === 'signin' ? 'bg-white shadow-sm text-gray-800' : 'text-gray-500 hover:text-gray-700'}`}
             >
-              Sign In
+              เข้าสู่ระบบ
             </button>
             <button
               type="button"
               onClick={() => switchTab('signup')}
               className={`flex-1 py-2.5 rounded-full text-sm font-medium transition-all ${tab === 'signup' ? 'bg-white shadow-sm text-gray-800' : 'text-gray-500 hover:text-gray-700'}`}
             >
-              Sign Up
+              สมัครสมาชิก
             </button>
           </div>
 
@@ -102,19 +102,19 @@ export default function Login() {
           <form onSubmit={handleSubmit} className="space-y-3">
             {tab === 'signup' && (
               <div className="flex gap-3">
-                <input type="text" value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="First Name" required className={inputCls} />
-                <input type="text" value={lastName} onChange={e => setLastName(e.target.value)} placeholder="Last Name" required className={inputCls} />
+                <input type="text" value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="ชื่อ" required className={inputCls} />
+                <input type="text" value={lastName} onChange={e => setLastName(e.target.value)} placeholder="นามสกุล" required className={inputCls} />
               </div>
             )}
 
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email" required className={inputCls} />
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="อีเมล" required className={inputCls} />
 
             <div className="relative">
               <input
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                placeholder="Password"
+                placeholder="รหัสผ่าน"
                 required
                 className={`${inputCls} pr-12`}
               />
@@ -126,7 +126,7 @@ export default function Login() {
             {tab === 'signin' && (
               <div className="text-right">
                 <Link to="/forgot-password" className="text-xs text-gray-400 hover:text-gray-600">
-                  Forgot password?
+                  ลืมรหัสผ่าน?
                 </Link>
               </div>
             )}
@@ -137,7 +137,7 @@ export default function Login() {
               className="w-full py-4 rounded-full text-white font-semibold text-base transition disabled:opacity-60 mt-1"
               style={{ backgroundColor: '#E91E8C' }}
             >
-              {loading ? 'Please wait...' : 'Continue'}
+              {loading ? 'กรุณารอสักครู่...' : 'ดำเนินการต่อ'}
             </button>
           </form>
         </div>

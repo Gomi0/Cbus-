@@ -43,11 +43,11 @@ export default function ForgotPassword() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
-    if (password !== confirm) { setError('Passwords do not match'); return }
+    if (password !== confirm) { setError('รหัสผ่านไม่ตรงกัน'); return }
     setLoading(true)
     const result = await forgotPassword(email)
     setLoading(false)
-    if (result.success) toast.success('Password reset successfully')
+    if (result.success) toast.success('รีเซ็ตรหัสผ่านสำเร็จ')
     else setError(result.error)
   }
 
@@ -61,11 +61,11 @@ export default function ForgotPassword() {
 
         <div className="flex-1 flex flex-col justify-center py-6">
           <Link to="/login" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 mb-6 w-fit">
-            <ArrowLeft size={15} /> Back
+            <ArrowLeft size={15} /> กลับ
           </Link>
 
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">Reset password</h1>
-          <p className="text-sm text-gray-400 mb-7">Please enter your email to reset your password.</p>
+          <h1 className="text-4xl font-bold text-gray-900 mb-2">รีเซ็ตรหัสผ่าน</h1>
+          <p className="text-sm text-gray-400 mb-7">กรุณากรอกอีเมลเพื่อรีเซ็ตรหัสผ่านของคุณ</p>
 
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-xl mb-4">
@@ -74,14 +74,14 @@ export default function ForgotPassword() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-3">
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email" required className={inputCls} />
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="อีเมล" required className={inputCls} />
 
             <div className="relative">
               <input
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                placeholder="Password"
+                placeholder="รหัสผ่าน"
                 required
                 className={`${inputCls} pr-12`}
               />
@@ -90,7 +90,7 @@ export default function ForgotPassword() {
               </button>
             </div>
 
-            <input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} placeholder="Confirm Password" required className={inputCls} />
+            <input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} placeholder="ยืนยันรหัสผ่าน" required className={inputCls} />
 
             <button
               type="submit"
@@ -98,7 +98,7 @@ export default function ForgotPassword() {
               className="w-full py-4 rounded-full text-white font-semibold text-base transition disabled:opacity-60 mt-1"
               style={{ backgroundColor: '#E91E8C' }}
             >
-              {loading ? 'Please wait...' : 'Continue'}
+              {loading ? 'กรุณารอสักครู่...' : 'ดำเนินการต่อ'}
             </button>
           </form>
         </div>

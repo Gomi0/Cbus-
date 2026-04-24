@@ -5,9 +5,9 @@ import { useAuth } from '../context/AuthContext'
 import { useToast } from '../context/ToastContext'
 
 const navItems = [
-  { to: '/building',  label: 'Building Control', icon: Building2,       end: false },
-  { to: '/import',    label: 'Import Excel',     icon: Upload,          end: false },
-  { to: '/dashboard', label: 'Dashboard',        icon: LayoutDashboard, end: true  },
+  { to: '/building',  label: 'ควบคุมอาคาร', icon: Building2,       end: false },
+  { to: '/import',    label: 'นำเข้า Excel', icon: Upload,          end: false },
+  { to: '/dashboard', label: 'แดชบอร์ด',    icon: LayoutDashboard, end: true  },
 ]
 
 export default function Navbar({ onOpenAccount }) {
@@ -18,7 +18,7 @@ export default function Navbar({ onOpenAccount }) {
 
   const handleSignOut = () => {
     logout()
-    toast.success('Signed out successfully')
+    toast.success('ออกจากระบบสำเร็จ')
     navigate('/login')
   }
 
@@ -59,7 +59,7 @@ export default function Navbar({ onOpenAccount }) {
       <div className="flex items-center gap-3">
         <button className="flex items-center gap-1.5 border border-gray-200 rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50">
           <Globe size={14} />
-          English
+          ภาษาไทย
         </button>
 
         <div className="relative">
@@ -82,14 +82,14 @@ export default function Navbar({ onOpenAccount }) {
                   className="flex items-center gap-2.5 w-full px-4 py-3 text-sm text-gray-700 hover:bg-gray-50"
                 >
                   <User size={15} className="text-gray-400" />
-                  Account
+                  บัญชีผู้ใช้
                 </button>
                 <button
                   onClick={() => { setDropdownOpen(false); handleSignOut() }}
                   className="flex items-center gap-2.5 w-full px-4 py-3 text-sm text-gray-700 hover:bg-gray-50"
                 >
                   <LogOut size={15} className="text-gray-400" />
-                  Sign Out
+                  ออกจากระบบ
                 </button>
               </div>
             </>
