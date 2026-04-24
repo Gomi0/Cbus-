@@ -26,15 +26,13 @@ const FLOOR_DATA = {
     image: '/assets/floor5-plan-dark.png',
     aspect: '734 / 226',
     rooms: [
-      { id: '504',   cap: 64, x:  2.6,  y:  5.3,  w: 16.2,  h: 28.8,  light: true,  ac: true  },
-      { id: 'STR-N', cap: 0,  x: 18.8,  y:  5.3,  w:  4.4,  h: 28.8,  light: false, ac: false, kind: 'svc' },
-      { id: '505',   cap: 48, x: 23.3,  y:  5.3,  w: 11.0,  h: 28.8,  light: true,  ac: false },
-      { id: '506',   cap: 44, x: 34.3,  y:  5.3,  w: 10.1,  h: 28.8,  light: false, ac: true  },
-      { id: 'WC-S',  cap: 0,  x:  2.6,  y: 43.4,  w: 10.7,  h: 25.6,  light: false, ac: false, kind: 'wc' },
+      { id: 'MDB',   cap: 0,  x:  2.6,  y:  5.3,  w: 16.2,  h: 28.8,  light: true,  ac: true,  kind: 'MDB' },
+      { id: 'GEN',   cap: 0,  x: 18.8,  y:  5.3,  w:  4.4,  h: 28.8,  light: false, ac: false, kind: 'svc' },
+      { id: '504',   cap: 48, x: 23.3,  y:  5.3,  w: 11.0,  h: 28.8,  light: true,  ac: false },
+      { id: '505',   cap: 44, x: 34.3,  y:  5.3,  w: 10.1,  h: 28.8,  light: false, ac: true  },
       { id: '503',   cap: 60, x: 11.4,  y: 43.4,  w: 11.9,  h: 25.6,  light: true,  ac: true  },
       { id: '502',   cap: 54, x: 23.3,  y: 43.4,  w: 11.0,  h: 25.6,  light: false, ac: true  },
       { id: '501',   cap: 54, x: 34.3,  y: 43.4,  w: 11.5,  h: 25.6,  light: true,  ac: true  },
-      { id: 'WC-N',  cap: 0,  x: 44.5,  y:  5.3,  w:  6.7,  h: 29.7,  light: false, ac: false, kind: 'wc' },
     ],
   },
   6: {
@@ -57,13 +55,12 @@ const FLOOR_DATA = {
     image: '/assets/floor7-plan-dark.png',
     aspect: '738 / 220',
     rooms: [
-      { id: '704',   cap: 48, x:  2.85, y: 10.45, w:  9.62, h: 25.0,  light: true,  ac: true  },
-      { id: '705',   cap: 48, x: 12.47, y: 10.45, w: 11.11, h: 25.0,  light: true,  ac: false },
-      { id: '706',   cap: 48, x: 23.58, y: 10.45, w: 10.98, h: 25.0,  light: false, ac: true  },
-      { id: '707',   cap: 44, x: 34.55, y: 10.45, w: 10.70, h: 25.0,  light: true,  ac: true  },
-      { id: 'STR-S', cap: 0,  x:  2.85, y: 45.45, w:  6.23, h: 25.9,  light: false, ac: false, kind: 'svc' },
-      { id: '703',   cap: 60, x: 11.65, y: 45.45, w: 11.92, h: 25.9,  light: true,  ac: true  },
-      { id: '702',   cap: 54, x: 23.58, y: 45.45, w: 10.98, h: 25.9,  light: false, ac: true  },
+      { id: '702',   cap: 48, x:  2.85, y: 10.45, w:  9.62, h: 25.0,  light: true,  ac: true  },
+      { id: '704',   cap: 48, x: 12.47, y: 10.45, w: 11.11, h: 25.0,  light: true,  ac: false },
+      { id: '704_2', cap: 48, x: 23.58, y: 10.45, w: 10.98, h: 25.0,  light: false, ac: true  },
+      { id: '705', cap: 44, x: 34.55, y: 10.45, w: 10.70, h: 25.0,  light: true,  ac: true  },
+      { id: '701_3',   cap: 60, x: 11.65, y: 45.45, w: 11.92, h: 25.9,  light: true,  ac: true  },
+      { id: '701_2',   cap: 54, x: 23.58, y: 45.45, w: 10.98, h: 25.9,  light: false, ac: true  },
       { id: '701',   cap: 54, x: 34.55, y: 45.45, w: 11.25, h: 25.9,  light: true,  ac: true  },
     ],
   },
@@ -117,14 +114,14 @@ const FLOOR_DATA = {
     image: '/assets/floor10-plan-dark.png',
     aspect: '1579 / 471',
     rooms: [
-      { id: 'A01',   cap: 54, x:  1.58, y:  9.98, w: 10.20, h: 26.1,  light: true,  ac: true  },
-      { id: 'A02',   cap: 54, x: 11.78, y:  9.98, w: 11.65, h: 26.1,  light: true,  ac: false },
-      { id: 'A03',   cap: 54, x: 23.43, y:  9.98, w: 11.66, h: 26.1,  light: false, ac: true  },
-      { id: 'A04',   cap: 48, x: 35.09, y:  9.98, w: 11.27, h: 26.1,  light: true,  ac: true  },
+      { id: '1001',  cap: 54, x:  1.58, y:  9.98, w: 10.20, h: 26.1,  light: true,  ac: true  },
+      { id: '1002',  cap: 54, x: 11.78, y:  9.98, w: 11.65, h: 26.1,  light: true,  ac: false },
+      { id: '1003',  cap: 54, x: 23.43, y:  9.98, w: 11.66, h: 26.1,  light: false, ac: true  },
+      { id: '1004',  cap: 48, x: 35.09, y:  9.98, w: 11.27, h: 26.1,  light: true,  ac: true  },
       { id: 'STR-S', cap: 0,  x:  1.58, y: 47.13, w:  6.59, h: 27.6,  light: false, ac: false, kind: 'svc' },
-      { id: 'B01',   cap: 72, x: 10.96, y: 47.13, w: 12.48, h: 27.6,  light: true,  ac: true  },
-      { id: 'B02',   cap: 72, x: 23.43, y: 47.13, w: 11.65, h: 27.6,  light: false, ac: true  },
-      { id: 'WC-S',  cap: 0,  x: 35.09, y: 47.13, w: 11.53, h: 27.6,  light: false, ac: false, kind: 'wc' },
+      { id: '1005',  cap: 72, x: 10.96, y: 47.13, w: 12.48, h: 27.6,  light: true,  ac: true  },
+      { id: '1006',  cap: 72, x: 23.43, y: 47.13, w: 11.65, h: 27.6,  light: false, ac: true  },
+
     ],
   },
   11: {
@@ -161,7 +158,6 @@ const FLOOR_DATA = {
       { id: '1212',  cap: 20, x: 74.02, y: 10.41, w:  7.71, h: 26.24, light: true,  ac: false },
       { id: '1213',  cap: 20, x: 81.73, y: 10.41, w:  7.44, h: 26.24, light: true,  ac: true  },
       { id: '1214',  cap: 20, x: 89.17, y: 10.41, w:  6.50, h: 26.24, light: false, ac: true  },
-      { id: 'WC-E',  cap: 0,  x: 64.00, y: 47.06, w: 34.10, h: 27.15, light: false, ac: false, kind: 'wc' },
     ],
   },
   14: {
@@ -184,21 +180,15 @@ const FLOOR_DATA = {
     image: '/assets/floor13-plan-dark.png',
     aspect: '740 / 231',
     rooms: [
-      { id: '1305',  cap: 24, x:  2.03, y:  9.96, w:  6.22, h: 25.11, light: true,  ac: true  },
-      { id: '1304',  cap: 32, x:  8.24, y:  9.96, w:  7.71, h: 25.11, light: true,  ac: false },
-      { id: '1303',  cap: 32, x: 15.95, y:  9.96, w:  7.71, h: 25.11, light: false, ac: true  },
-      { id: '1302',  cap: 32, x: 23.65, y:  9.96, w:  7.71, h: 25.11, light: true,  ac: true  },
-      { id: '1301',  cap: 48, x: 31.35, y:  9.96, w: 15.00, h: 25.11, light: false, ac: true  },
+      { id: '12A05', cap: 24, x:  2.03, y:  9.96, w:  6.22, h: 25.11, light: true,  ac: true  },
+      { id: '12A04', cap: 32, x:  8.24, y:  9.96, w:  7.71, h: 25.11, light: true,  ac: false },
+      { id: '12A03', cap: 32, x: 15.95, y:  9.96, w:  7.71, h: 25.11, light: false, ac: true  },
+      { id: '12A02', cap: 32, x: 23.65, y:  9.96, w:  7.71, h: 25.11, light: true,  ac: true  },
+      { id: '12A01', cap: 48, x: 31.35, y:  9.96, w: 15.00, h: 25.11, light: false, ac: true  },
       { id: 'STR-S', cap: 0,  x:  2.03, y: 45.02, w:  9.19, h: 25.97, light: false, ac: false, kind: 'svc' },
-      { id: '1306',  cap: 60, x: 11.22, y: 45.02, w: 12.43, h: 25.97, light: true,  ac: true  },
-      { id: '1307',  cap: 54, x: 23.65, y: 45.02, w: 11.49, h: 25.97, light: false, ac: true  },
-      { id: '1308',  cap: 54, x: 35.14, y: 45.02, w: 11.22, h: 25.97, light: true,  ac: true  },
-      { id: 'MR1',   cap: 16, x: 66.22, y: 35.50, w:  8.11, h: 15.00, light: true,  ac: true,  kind: 'svc' },
-      { id: 'MR2',   cap: 16, x: 74.59, y: 35.50, w:  7.84, h: 15.00, light: false, ac: true,  kind: 'svc' },
-      { id: 'MR3',   cap: 16, x: 82.70, y: 35.50, w:  7.84, h: 15.00, light: true,  ac: false, kind: 'svc' },
-      { id: 'MR4',   cap: 16, x: 66.22, y: 51.00, w:  8.11, h: 15.00, light: false, ac: true,  kind: 'svc' },
-      { id: 'MR5',   cap: 16, x: 74.59, y: 51.00, w:  7.84, h: 15.00, light: true,  ac: true,  kind: 'svc' },
-      { id: 'MR6',   cap: 16, x: 82.70, y: 51.00, w:  7.84, h: 15.00, light: false, ac: false, kind: 'svc' },
+      { id: '12A06', cap: 60, x: 11.22, y: 45.02, w: 12.43, h: 25.97, light: true,  ac: true  },
+      { id: '12A07', cap: 54, x: 23.65, y: 45.02, w: 11.49, h: 25.97, light: false, ac: true  },
+      { id: '12A08', cap: 54, x: 35.14, y: 45.02, w: 11.22, h: 25.97, light: true,  ac: true  },
       { id: 'WC-E',  cap: 0,  x: 91.35, y: 35.50, w:  6.78, h: 30.50, light: false, ac: false, kind: 'wc' },
     ],
   },
@@ -250,7 +240,7 @@ function GroupBox({ room, selected, onClick, onToggle }) {
     border: `2px solid ${color}`, pointerEvents: 'none',
   }
 
-  const label    = isWC ? 'WC' : isSvc ? 'SVR' : `RM ${room.id}`
+  const label    = isWC ? 'WC' : isSvc ? 'SVR' : ` ${room.id}`
   const liveText = st === 'on' ? 'เปิด' : st === 'mix' ? 'บางส่วน' : 'ปิด'
 
   return (
@@ -387,7 +377,7 @@ export default function BuildingControl() {
               const hasDivider = idx > 0 && n - FLOOR_LIST[idx - 1] > 1
               const active    = n === currentFloor
               const hasData   = !!FLOOR_DATA[n]
-              const disabled  = n === 1
+              const disabled  = n === 1 || n === 14
               return (
                 <div key={n}>
                   {hasDivider && <div className="w-6 h-px bg-gray-200 my-1.5" />}
