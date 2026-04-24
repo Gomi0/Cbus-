@@ -205,6 +205,15 @@ const FLOOR_DATA = {
 }
 
 // ─── helpers ──────────────────────────────────────────────
+function aspectToPaddingTop(aspect) {
+  if (!aspect) return '43.75%'
+  var parts = String(aspect).split('/')
+  var w = parseFloat(parts[0])
+  var h = parseFloat(parts[1])
+  if (!w || !h) return '43.75%'
+  return (h / w * 100).toFixed(3) + '%'
+}
+
 function statusOf(r) {
   if (r.light && r.ac) return 'on'
   if (!r.light && !r.ac) return 'off'
@@ -567,7 +576,7 @@ export default function BuildingControl() {
               ].map(tool => (
                 <div key={tool.title} title={tool.title} style={{
                   width: 28, height: 28, borderRadius: 7,
-                  display: 'grid', placeItems: 'center', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
                   background: tool.active ? 'rgba(233,30,140,0.18)' : 'rgba(255,255,255,0.04)',
                   border: `1px solid ${tool.active ? 'rgba(233,30,140,0.55)' : 'rgba(255,255,255,0.10)'}`,
                   color: tool.active ? '#E91E8C' : '#4b5563',
@@ -576,27 +585,33 @@ export default function BuildingControl() {
             </div>
 
             {/* Stage */}
-            <div className="relative mx-4 mb-6" style={{
-              aspectRatio: floorData?.aspect || '16 / 7',
-              marginTop: 44,
-              borderRadius: 10,
-              overflow: 'hidden',
-            }}>
-              {floorData?.image && (
-                <img
-                  src={floorData.image}
-                  alt={`แผนผังชั้น ${currentFloor}`}
-                  className="absolute inset-0 w-full h-full object-contain"
-                />
-              )}
-              {rooms.map((room, idx) => (
-                <GroupBox
-                  key={room.id}
-                  room={room}
-                  selected={selectedIdx === idx}
-                  onClick={() => selectRoom(idx)}
-                />
-              ))}
+            <div className="relative mx-4 mb-6" style={{ marginTop: 44 }}>
+              <div style={{
+                position: 'relative',
+                paddingTop: aspectToPaddingTop(floorData ? floorData.aspect : null),
+                borderRadius: 10,
+                overflow: 'hidden',
+              }}>
+                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
+                  {floorData && floorData.image && (
+                    <img
+                      src={floorData.image}
+                      alt={'แผนผังชั้น ' + currentFloor}
+                      className="absolute inset-0 w-full h-full object-contain"
+                    />
+                  )}
+                  {rooms.map(function(room, idx) {
+                    return (
+                      <GroupBox
+                        key={room.id}
+                        room={room}
+                        selected={selectedIdx === idx}
+                        onClick={function() { selectRoom(idx) }}
+                      />
+                    )
+                  })}
+                </div>
+              </div>
             </div>
 
             {/* Compass */}
@@ -639,16 +654,19 @@ export default function BuildingControl() {
           </div>
 
           {/* Room cards */}
-          <div className="grid grid-cols-4 gap-3 pb-8">
-            {rooms.map((room, idx) => (
-              <RoomCard
-                key={room.id}
-                room={room}
-                selected={selectedIdx === idx}
-                onClick={() => selectRoom(idx)}
-                onToggle={field => toggleRoom(idx, field)}
-              />
-            ))}
+          <div style={{ display: 'flex', flexWrap: 'wrap', margin: '-6px', paddingBottom: 32 }}>
+            {rooms.map(function(room, idx) {
+              return (
+                <div key={room.id} style={{ width: '25%', padding: '6px', boxSizing: 'border-box' }}>
+                  <RoomCard
+                    room={room}
+                    selected={selectedIdx === idx}
+                    onClick={function() { selectRoom(idx) }}
+                    onToggle={function(field) { toggleRoom(idx, field) }}
+                  />
+                </div>
+              )
+            })}
           </div>
         </main>
       </div>
