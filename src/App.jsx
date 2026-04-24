@@ -24,9 +24,9 @@ export default function App() {
               <Route path="/forgot-password" element={<ForgotPassword />} />
 
               {/* Protected */}
-              <Route path="/"         element={<Navigate to="/dashboard" replace />} />
+              <Route path="/"          element={<ProtectedRoute><ImportExcel /></ProtectedRoute>} />
               <Route path="/dashboard" element={<ProtectedRoute><CheckReserved /></ProtectedRoute>} />
-              <Route path="/import"    element={<ProtectedRoute><ImportExcel /></ProtectedRoute>} />
+              <Route path="/import"    element={<Navigate to="/" replace />} />
               <Route path="/building"  element={<ProtectedRoute adminOnly><BuildingControl /></ProtectedRoute>} />
 
               {/* 404 */}

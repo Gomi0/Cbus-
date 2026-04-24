@@ -6,7 +6,7 @@ import { useToast } from '../context/ToastContext'
 
 const navItems = [
   { to: '/building',  label: 'ควบคุมอาคาร', icon: Building2,       end: false },
-  { to: '/import',    label: 'นำเข้า Excel', icon: Upload,          end: false },
+  { to: '/',          label: 'นำเข้า Excel', icon: Upload,          end: true  },
   { to: '/dashboard', label: 'แดชบอร์ด',    icon: LayoutDashboard, end: true  },
 ]
 

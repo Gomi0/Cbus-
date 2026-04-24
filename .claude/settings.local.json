@@ -20,7 +20,8 @@
       "Bash(mkdir design_out)",
       "Bash(tar xf *)",
       "Bash(cp \"/tmp/design_out/cbus/project/assets/floor9-plan-dark.png\" \"D:/cbus/public/assets/floor9-plan-dark.png\")",
-      "Bash(cp \"/tmp/design_out/cbus/project/assets/floor14-plan.png\" \"D:/cbus/public/assets/floor14-plan-dark.png\")"
+      "Bash(cp \"/tmp/design_out/cbus/project/assets/floor14-plan.png\" \"D:/cbus/public/assets/floor14-plan-dark.png\")",
+      "Bash(git restore *)"
     ]
   }
 }

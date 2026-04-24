@@ -220,53 +220,29 @@ function statusOf(r) {
   return 'mix'
 }
 
-function gboxColor(st, selected) {
+function gboxColor(room, selected) {
   if (selected) return '#E91E8C'
-  if (st === 'on')  return '#22c55e'
-  if (st === 'mix') return '#f59e0b'
+  if (room.ac && room.light) return '#3b82f6'
+  if (room.ac)   return '#3b82f6'
+  if (room.light) return '#f59e0b'
   return '#6b7280'
 }
 
-function gboxBg(st, selected) {
+function gboxBg(room, selected) {
   if (selected) return 'rgba(233,30,140,0.18)'
-  if (st === 'on')  return 'rgba(34,197,94,0.14)'
-  if (st === 'mix') return 'rgba(245,158,11,0.16)'
+  if (room.ac && room.light) return 'rgba(59,130,246,0.14)'
+  if (room.ac)   return 'rgba(59,130,246,0.14)'
+  if (room.light) return 'rgba(245,158,11,0.16)'
   return 'rgba(255,255,255,0.04)'
 }
 
-// ─── Toggle ───────────────────────────────────────────────
-function Toggle({ on, onChange }) {
-  return (
-    <button
-      type="button"
-      onClick={onChange}
-      style={{
-        position: 'relative', flexShrink: 0,
-        width: 38, height: 22, borderRadius: 999,
-        background: on ? '#E91E8C' : '#e5e7eb',
-        border: `1px solid ${on ? 'transparent' : '#d1d5db'}`,
-        cursor: 'pointer', transition: 'background .18s',
-      }}
-    >
-      <span style={{
-        position: 'absolute', top: 2,
-        left: on ? 18 : 2,
-        width: 16, height: 16, borderRadius: '50%',
-        background: '#fff',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.18)',
-        transition: 'left .18s',
-      }} />
-    </button>
-  )
-}
-
 // ─── GroupBox (floor plan overlay — dark canvas) ──────────
-function GroupBox({ room, selected, onClick }) {
+function GroupBox({ room, selected, onClick, onToggle }) {
   const st    = statusOf(room)
   const isWC  = room.kind === 'wc'
   const isSvc = room.kind === 'svc'
-  const color = gboxColor(st, selected)
-  const bg    = gboxBg(st, selected)
+  const color = gboxColor(room, selected)
+  const bg    = gboxBg(room, selected)
   const br    = 6
 
   const corner = {
@@ -274,10 +250,8 @@ function GroupBox({ room, selected, onClick }) {
     border: `2px solid ${color}`, pointerEvents: 'none',
   }
 
-  const label      = isWC ? 'WC' : isSvc ? 'SVR' : `RM ${room.id}`
-  const liveText   = st === 'on' ? 'เปิด' : st === 'mix' ? 'บางส่วน' : 'ปิด'
-  const onCount    = (room.light ? 1 : 0) + (room.ac ? 1 : 0)
-  const centerText = isWC ? 'ห้องน้ำ' : isSvc ? 'ซ่อมบำรุง' : `${onCount}/2 ใช้งาน · ${room.cap}`
+  const label    = isWC ? 'WC' : isSvc ? 'SVR' : `RM ${room.id}`
+  const liveText = st === 'on' ? 'เปิด' : st === 'mix' ? 'บางส่วน' : 'ปิด'
 
   return (
     <div
@@ -297,33 +271,31 @@ function GroupBox({ room, selected, onClick }) {
       <span style={{ ...corner, bottom: -2, left: -2, borderRight: 'none', borderTop: 'none', borderBottomLeftRadius: br }} />
       <span style={{ ...corner, bottom: -2, right: -2, borderLeft: 'none', borderTop: 'none', borderBottomRightRadius: br }} />
 
-      <span style={{
-        position: 'absolute', top: -9, left: 10,
-        fontFamily: 'monospace', fontSize: 10, fontWeight: 700,
-        color, letterSpacing: 1,
-        background: '#111', padding: '1px 6px', borderRadius: 3,
-      }}>{label}</span>
-
-      <span style={{
-        position: 'absolute', top: -9, right: 10,
-        display: 'flex', gap: 3,
-        background: '#111', padding: '2px 5px', borderRadius: 3,
-      }}>
-        <img src={room.light ? lightbulbOn : lightbulbOff} style={{ width: 12, height: 12, opacity: room.light ? 1 : 0.35 }} />
-        <img src={room.ac    ? snowflakeOn : snowflakeOff} style={{ width: 12, height: 12, opacity: room.ac    ? 1 : 0.35 }} />
-      </span>
-
-      <span style={{
+      {/* Center: room label above icons */}
+      <div style={{
         position: 'absolute', left: '50%', top: '50%',
         transform: 'translate(-50%,-50%)',
-        background: 'rgba(0,0,0,0.78)',
-        border: `1px solid ${color}`,
-        padding: '4px 8px', borderRadius: 6,
-        fontSize: 10, fontWeight: 600, letterSpacing: 0.5,
-        whiteSpace: 'nowrap', pointerEvents: 'none',
-        color, opacity: selected ? 1 : 0,
-        transition: 'opacity .15s',
-      }}>{centerText}</span>
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
+      }}>
+        <span style={{
+          fontFamily: 'monospace', fontSize: 24, fontWeight: 800,
+          color, letterSpacing: 1, whiteSpace: 'nowrap',
+          background: 'rgba(0,0,0,0.55)', padding: '2px 10px', borderRadius: 4,
+          pointerEvents: 'none',
+        }}>{label}</span>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <img
+            src={room.light ? lightbulbOn : lightbulbOff}
+            onClick={function(e) { e.stopPropagation(); onToggle('light') }}
+            style={{ width: 40, height: 40, cursor: 'pointer', filter: room.light ? 'none' : 'brightness(0)', transition: 'filter .15s' }}
+          />
+          <img
+            src={room.ac ? snowflakeOn : snowflakeOff}
+            onClick={function(e) { e.stopPropagation(); onToggle('ac') }}
+            style={{ width: 40, height: 40, cursor: 'pointer', filter: room.ac ? 'none' : 'brightness(0)', transition: 'filter .15s' }}
+          />
+        </div>
+      </div>
 
       <span style={{
         position: 'absolute', bottom: -9, left: 10,
@@ -335,61 +307,6 @@ function GroupBox({ room, selected, onClick }) {
         <span style={{ width: 6, height: 6, borderRadius: '50%', background: color, display: 'inline-block' }} />
         {liveText}
       </span>
-    </div>
-  )
-}
-
-// ─── RoomCard (light theme) ────────────────────────────────
-function RoomCard({ room, selected, onClick, onToggle }) {
-  const st    = statusOf(room)
-  const isWC  = room.kind === 'wc'
-  const isSvc = room.kind === 'svc'
-  const title = isWC ? 'ห้องน้ำ' : isSvc ? 'ห้องซ่อมบำรุง' : `ห้อง ${room.id}`
-
-  const statusLabel = st === 'on' ? 'เปิดทั้งหมด' : st === 'mix' ? 'บางส่วน' : 'ปิด'
-  const statusCls   = st === 'on'
-    ? 'bg-green-50 text-green-600 border-green-200'
-    : st === 'mix'
-    ? 'bg-amber-50 text-amber-600 border-amber-200'
-    : 'bg-gray-50 text-gray-400 border-gray-200'
-
-  return (
-    <div
-      onClick={onClick}
-      className={`rounded-2xl border p-4 cursor-pointer transition-all bg-white ${
-        selected
-          ? 'border-[#E91E8C] shadow-lg shadow-pink-100/60 ring-1 ring-[#E91E8C]/20'
-          : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
-      }`}
-    >
-      <div className="flex items-center justify-between mb-3">
-        <span className="font-semibold text-gray-800 text-sm truncate pr-2">{title}</span>
-        <span className={`text-xs px-2 py-0.5 rounded-full border font-medium whitespace-nowrap ${statusCls}`}>
-          {statusLabel}
-        </span>
-      </div>
-
-      {/* Light row */}
-      <div className="flex items-center justify-between py-2.5 border-t border-gray-100">
-        <div className={`flex items-center gap-2 text-sm ${room.light ? 'text-gray-800' : 'text-gray-400'}`}>
-          <span className={`w-6 h-6 rounded-lg flex items-center justify-center ${room.light ? 'bg-amber-50' : 'bg-gray-50'}`}>
-            <img src={room.light ? lightbulbOn : lightbulbOff} className="w-3.5 h-3.5" style={{ opacity: room.light ? 1 : 0.4 }} />
-          </span>
-          ไฟ
-        </div>
-        <Toggle on={room.light} onChange={e => { e.stopPropagation(); onToggle('light') }} />
-      </div>
-
-      {/* AC row */}
-      <div className="flex items-center justify-between py-2.5 border-t border-gray-100">
-        <div className={`flex items-center gap-2 text-sm ${room.ac ? 'text-gray-800' : 'text-gray-400'}`}>
-          <span className={`w-6 h-6 rounded-lg flex items-center justify-center ${room.ac ? 'bg-blue-50' : 'bg-gray-50'}`}>
-            <img src={room.ac ? snowflakeOn : snowflakeOff} className="w-3.5 h-3.5" style={{ opacity: room.ac ? 1 : 0.4 }} />
-          </span>
-          แอร์
-        </div>
-        <Toggle on={room.ac} onChange={e => { e.stopPropagation(); onToggle('ac') }} />
-      </div>
     </div>
   )
 }
@@ -468,21 +385,24 @@ export default function BuildingControl() {
           <div className="flex flex-col gap-1 items-center">
             {FLOOR_LIST.map((n, idx) => {
               const hasDivider = idx > 0 && n - FLOOR_LIST[idx - 1] > 1
-              const active  = n === currentFloor
-              const hasData = !!FLOOR_DATA[n]
+              const active    = n === currentFloor
+              const hasData   = !!FLOOR_DATA[n]
+              const disabled  = n === 1
               return (
                 <div key={n}>
                   {hasDivider && <div className="w-6 h-px bg-gray-200 my-1.5" />}
                   <button
-                    onClick={() => selectFloor(n)}
+                    onClick={() => !disabled && selectFloor(n)}
                     className={`w-9 h-9 rounded-xl text-sm font-semibold transition-all ${
-                      active
+                      disabled
+                        ? 'text-gray-300 cursor-not-allowed'
+                        : active
                         ? 'text-white'
                         : hasData
                         ? 'text-gray-500 hover:bg-gray-100'
                         : 'text-gray-300 cursor-default'
                     }`}
-                    style={active ? {
+                    style={active && !disabled ? {
                       backgroundColor: '#E91E8C',
                       boxShadow: '0 4px 14px -2px rgba(233,30,140,0.45)',
                     } : {}}
@@ -607,6 +527,7 @@ export default function BuildingControl() {
                         room={room}
                         selected={selectedIdx === idx}
                         onClick={function() { selectRoom(idx) }}
+                        onToggle={function(field) { toggleRoom(idx, field) }}
                       />
                     )
                   })}
@@ -653,21 +574,6 @@ export default function BuildingControl() {
             </button>
           </div>
 
-          {/* Room cards */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', margin: '-6px', paddingBottom: 32 }}>
-            {rooms.map(function(room, idx) {
-              return (
-                <div key={room.id} style={{ width: '25%', padding: '6px', boxSizing: 'border-box' }}>
-                  <RoomCard
-                    room={room}
-                    selected={selectedIdx === idx}
-                    onClick={function() { selectRoom(idx) }}
-                    onToggle={function(field) { toggleRoom(idx, field) }}
-                  />
-                </div>
-              )
-            })}
-          </div>
         </main>
       </div>
 
