@@ -1,3 +1,4 @@
+
 import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
@@ -49,7 +50,7 @@ export default function Layout({ children }) {
 
   const handleLogout = () => {
     logout()
-    navigate('/login')
+    navigate('/')
   }
 
   return (
@@ -126,3 +127,4 @@ export default function Layout({ children }) {
     </div>
   )
 }
+

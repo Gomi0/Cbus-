@@ -1,3 +1,4 @@
+
 import { useState } from 'react'
 import { Pencil, Check, X } from 'lucide-react'
 import Navbar from '../components/Navbar'
@@ -97,3 +98,4 @@ export default function Settings() {
     </div>
   )
 }
+

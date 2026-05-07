@@ -1,3 +1,4 @@
+
 export const INITIAL_RESERVATIONS = [
   { id: 1, user: 'Dr. Somchai',   date: '2026-02-01', time: '09:00-11:00', room: '11 - 1102', status: 'Booked' },
   { id: 2, user: 'Ms. Ananya',    date: '2026-02-01', time: '13:00-15:00', room: '11 - 0102', status: 'Pending' },
@@ -30,3 +31,4 @@ export const FLOORS = Array.from({ length: 14 }, (_, i) => ({
     { id: `${i + 1}04`, name: `${String(i + 1).padStart(2, '0')}04`, capacity: 30, ac: false, light: false },
   ],
 }))
+

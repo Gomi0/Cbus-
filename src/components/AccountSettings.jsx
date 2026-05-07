@@ -1,3 +1,4 @@
+
 import { useState, useRef } from 'react'
 import { Upload } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
@@ -125,3 +126,4 @@ export default function AccountSettings({ isOpen, onClose }) {
     </div>
   )
 }
+

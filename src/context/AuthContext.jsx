@@ -1,3 +1,4 @@
+
 import { createContext, useContext, useState, useCallback } from 'react'
 
 const AuthContext = createContext(null)
@@ -5,23 +6,20 @@ const AuthContext = createContext(null)
 const USERS_KEY = 'spu_users'
 const SESSION_KEY = 'spu_user'
 
-const defaultUsers = [
-  { id: 1, firstName: 'Anna', lastName: 'Taylor', email: 'admin@spu.ac.th', phone: '0876548972', password: '', avatar: null, role: 'admin' },
-]
+const defaultAdmin = { id: 1, firstName: 'Anna', lastName: 'Taylor', email: 'admin@spu.ac.th', phone: '0876548972', avatar: null, role: 'admin' }
 
 function getUsers() {
   try {
     const stored = localStorage.getItem(USERS_KEY)
-    if (!stored) return defaultUsers
+    if (!stored) return [defaultAdmin]
     const parsed = JSON.parse(stored)
-    if (!Array.isArray(parsed) || parsed.length === 0) return defaultUsers
-    // Always ensure default admin exists with admin role
+    if (!Array.isArray(parsed) || parsed.length === 0) return [defaultAdmin]
     const adminIdx = parsed.findIndex(u => u.email === 'admin@spu.ac.th')
-    if (adminIdx === -1) return [...defaultUsers, ...parsed]
+    if (adminIdx === -1) return [defaultAdmin, ...parsed]
     parsed[adminIdx] = { ...parsed[adminIdx], role: 'admin' }
     return parsed
   } catch {
-    return defaultUsers
+    return [defaultAdmin]
   }
 }
 
@@ -33,46 +31,15 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
     try {
       const s = localStorage.getItem(SESSION_KEY)
-      return s ? JSON.parse(s) : null
-    } catch {
-      return null
-    }
+      if (s) return JSON.parse(s)
+    } catch { /* ignore */ }
+    localStorage.setItem(SESSION_KEY, JSON.stringify(defaultAdmin))
+    return defaultAdmin
   })
 
-  const login = useCallback(async (email, password) => {
-    await new Promise(r => setTimeout(r, 700))
-    const users = getUsers()
-    const found = users.find(u => u.email === email && u.password === password)
-    if (!found) return { success: false, error: 'อีเมลหรือรหัสผ่านไม่ถูกต้อง' }
-    const { password: _, ...userData } = found
-    setUser(userData)
-    localStorage.setItem(SESSION_KEY, JSON.stringify(userData))
-    return { success: true }
-  }, [])
-
-  const register = useCallback(async ({ firstName, lastName, email, password }) => {
-    await new Promise(r => setTimeout(r, 700))
-    const users = getUsers()
-    if (users.find(u => u.email === email)) return { success: false, error: 'อีเมลนี้ถูกใช้งานแล้ว' }
-    const newUser = { id: Date.now(), firstName, lastName, email, phone: '', password, avatar: null, role: 'user' }
-    const updated = [...users, newUser]
-    saveUsers(updated)
-    const { password: _, ...userData } = newUser
-    setUser(userData)
-    localStorage.setItem(SESSION_KEY, JSON.stringify(userData))
-    return { success: true }
-  }, [])
-
   const logout = useCallback(() => {
-    setUser(null)
-    localStorage.removeItem(SESSION_KEY)
-  }, [])
-
-  const forgotPassword = useCallback(async (email) => {
-    await new Promise(r => setTimeout(r, 700))
-    const users = getUsers()
-    if (!users.find(u => u.email === email)) return { success: false, error: 'ไม่พบอีเมลนี้ในระบบ' }
-    return { success: true }
+    setUser(defaultAdmin)
+    localStorage.setItem(SESSION_KEY, JSON.stringify(defaultAdmin))
   }, [])
 
   const updateProfile = useCallback((updates) => {
@@ -87,7 +54,7 @@ export function AuthProvider({ children }) {
   }, [user])
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, forgotPassword, updateProfile }}>
+    <AuthContext.Provider value={{ user, logout, updateProfile }}>
       {children}
     </AuthContext.Provider>
   )
@@ -99,3 +66,4 @@ export function useAuth() {
   if (!ctx) throw new Error('useAuth must be inside AuthProvider')
   return ctx
 }
+

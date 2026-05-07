@@ -1,3 +1,4 @@
+
 import { Link } from 'react-router-dom'
 
 export default function NotFound() {
@@ -16,3 +17,4 @@ export default function NotFound() {
     </div>
   )
 }
+

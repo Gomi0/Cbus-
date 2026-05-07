@@ -1,3 +1,4 @@
+
 import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { CheckCircle2, Calendar, Clock, MapPin } from 'lucide-react'
@@ -104,3 +105,4 @@ export default function BookingConfirm() {
     </div>
   )
 }
+

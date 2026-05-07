@@ -1,3 +1,4 @@
+
 import { X } from 'lucide-react'
 import { useToast } from '../context/ToastContext'
 
@@ -30,3 +31,4 @@ export default function Toast() {
     </div>
   )
 }
+

@@ -1,3 +1,4 @@
+
 export default function ConfirmModal({ isOpen, title, message, onConfirm, onCancel, confirmLabel = 'Delete', danger = true }) {
   if (!isOpen) return null
   return (
@@ -24,3 +25,4 @@ export default function ConfirmModal({ isOpen, title, message, onConfirm, onCanc
     </div>
   )
 }
+

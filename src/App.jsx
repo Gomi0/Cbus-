@@ -1,12 +1,9 @@
+
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import { ToastProvider } from './context/ToastContext'
 import ErrorBoundary from './components/ErrorBoundary'
-import ProtectedRoute from './components/ProtectedRoute'
 import Toast from './components/Toast'
-
-import Login from './pages/Login'
-import ForgotPassword from './pages/ForgotPassword'
 import CheckReserved from './pages/CheckReserved'
 import ImportExcel from './pages/ImportExcel'
 import BuildingControl from './pages/BuildingControl'
@@ -19,15 +16,10 @@ export default function App() {
         <ToastProvider>
           <BrowserRouter>
             <Routes>
-              {/* Public */}
-              <Route path="/login"           element={<Login />} />
-              <Route path="/forgot-password" element={<ForgotPassword />} />
-
-              {/* Protected */}
-              <Route path="/"          element={<ProtectedRoute><ImportExcel /></ProtectedRoute>} />
-              <Route path="/dashboard" element={<ProtectedRoute><CheckReserved /></ProtectedRoute>} />
+              <Route path="/"          element={<ImportExcel />} />
+              <Route path="/dashboard" element={<CheckReserved />} />
               <Route path="/import"    element={<Navigate to="/" replace />} />
-              <Route path="/building"  element={<ProtectedRoute adminOnly><BuildingControl /></ProtectedRoute>} />
+              <Route path="/building"  element={<BuildingControl />} />
 
               {/* 404 */}
               <Route path="*" element={<NotFound />} />
@@ -39,3 +31,4 @@ export default function App() {
     </ErrorBoundary>
   )
 }
+
