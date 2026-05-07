@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx'
 import { CloudUpload, FolderOpen, CheckCircle, AlertCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Clock, FileSpreadsheet } from 'lucide-react'
 import Navbar from '../components/Navbar'
 import rawSchedule from '../data/scheduleData.json'
+import { useToast } from '../context/ToastContext'
 
 /* ─── Constants ─── */
 const ALL_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -192,6 +193,7 @@ const DAY_COLOR = {
 }
 
 export default function ImportExcel() {
+  const { toast } = useToast()
   const [dragging,     setDragging]     = useState(false)
   const [fileName,     setFileName]     = useState(null)
   const [importStatus, setImportStatus] = useState(null)
@@ -200,6 +202,7 @@ export default function ImportExcel() {
   const [isModified,   setIsModified]   = useState(false)
   const [modal,        setModal]        = useState(null)   // null | 'add' | rawItem
   const [form,         setForm]         = useState(EMPTY_FORM)
+  const [submitting,   setSubmitting]   = useState(false)
 
   const ALL_CLASSES = useMemo(() => detectConflicts(buildClasses(rawData)), [rawData])
 
@@ -338,6 +341,29 @@ export default function ImportExcel() {
     }
     reader.onerror = () => { setImportStatus('error'); setImportError('อ่านไฟล์ไม่ได้ กรุณาลองอีกครั้ง') }
     reader.readAsArrayBuffer(file)
+  }
+
+  const handleSubmit = async () => {
+    if (rawData.length === 0) { toast.warning('ไม่มีข้อมูลคาบเรียน'); return }
+    const conflicts = ALL_CLASSES.filter(c => c.conflict)
+    if (conflicts.length > 0) {
+      toast.error(`พบ ${conflicts.length} ความขัดแย้ง กรุณาแก้ไขก่อนสร้างตาราง`)
+      return
+    }
+    setSubmitting(true)
+    try {
+      const res = await fetch('/api/schedule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ schedules: rawData }),
+      })
+      if (!res.ok) throw new Error(`Server error ${res.status}`)
+      toast.success('สร้างตารางเรียนสำเร็จ')
+    } catch (err) {
+      toast.error(`ส่งข้อมูลไม่สำเร็จ: ${err.message}`)
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const conflictCount = visibleClasses.filter(c => c.conflict).length
@@ -696,10 +722,12 @@ export default function ImportExcel() {
             ยกเลิกแบบร่าง
           </button>
           <button
-            className="flex items-center gap-2 px-8 py-3 rounded-full text-white text-sm font-semibold hover:opacity-90 transition-opacity"
+            onClick={handleSubmit}
+            disabled={submitting}
+            className="flex items-center gap-2 px-8 py-3 rounded-full text-white text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed"
             style={{ backgroundColor: '#9B1B5A' }}
           >
-            <CheckCircle size={16} />สร้างตารางเรียน
+            <CheckCircle size={16} />{submitting ? 'กำลังส่ง...' : 'สร้างตารางเรียน'}
           </button>
         </div>
       </main>
