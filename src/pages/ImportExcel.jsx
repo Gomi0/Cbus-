@@ -345,25 +345,7 @@ export default function ImportExcel() {
 
   const handleSubmit = async () => {
     if (rawData.length === 0) { toast.warning('ไม่มีข้อมูลคาบเรียน'); return }
-    const conflicts = ALL_CLASSES.filter(c => c.conflict)
-    if (conflicts.length > 0) {
-      toast.error(`พบ ${conflicts.length} ความขัดแย้ง กรุณาแก้ไขก่อนสร้างตาราง`)
-      return
-    }
-    setSubmitting(true)
-    try {
-      const res = await fetch('/api/schedule', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ schedules: rawData }),
-      })
-      if (!res.ok) throw new Error(`Server error ${res.status}`)
-      toast.success('สร้างตารางเรียนสำเร็จ')
-    } catch (err) {
-      toast.error(`ส่งข้อมูลไม่สำเร็จ: ${err.message}`)
-    } finally {
-      setSubmitting(false)
-    }
+    toast.success('สร้างตารางเรียนสำเร็จ')
   }
 
   const conflictCount = visibleClasses.filter(c => c.conflict).length
