@@ -18,7 +18,6 @@ export default function App() {
               <Route path="/"          element={<ImportExcel />} />
               <Route path="/import"    element={<Navigate to="/" replace />} />
               <Route path="/building"  element={<BuildingControl />} />
-
               {/* 404 */}
               <Route path="*" element={<NotFound />} />
             </Routes>

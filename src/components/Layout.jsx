@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import spuLogo from '../assets/new_logo_spu01.png'
 
 const navItems = [
   {
@@ -59,9 +60,7 @@ export default function Layout({ children }) {
       <aside className={`${sidebarOpen ? 'w-56' : 'w-16'} bg-white border-r border-gray-200 flex flex-col transition-all duration-200`}>
         {/* Logo */}
         <div className="flex items-center gap-3 px-4 py-5 border-b border-gray-100">
-          <div className="w-8 h-8 bg-pink-600 rounded-lg flex items-center justify-center flex-shrink-0">
-            <span className="text-white font-bold text-xs">SPU</span>
-          </div>
+          <img src={spuLogo} alt="SPU Logo" className={`object-contain flex-shrink-0 ${sidebarOpen ? 'h-10 w-auto' : 'h-8 w-8'}`} />
           {sidebarOpen && <span className="font-bold text-gray-800 text-sm">Building Control</span>}
         </div>
 
@@ -121,7 +120,9 @@ export default function Layout({ children }) {
 
         {/* Content */}
         <main className="flex-1 overflow-y-auto p-6">
-          {children}
+          <div className="max-w-6xl mx-auto">
+            {children}
+          </div>
         </main>
       </div>
     </div>

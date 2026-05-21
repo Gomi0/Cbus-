@@ -3,7 +3,6 @@ import { useState, useRef, useMemo, useEffect } from 'react'
 import * as XLSX from 'xlsx'
 import { CloudUpload, FolderOpen, CheckCircle, AlertCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Clock, FileSpreadsheet } from 'lucide-react'
 import Navbar from '../components/Navbar'
-import rawSchedule from '../data/scheduleData.json'
 import { useToast } from '../context/ToastContext'
 
 /* ─── Constants ─── */
@@ -48,10 +47,24 @@ function floorFromRoomCode(roomCode) {
   return Math.floor(parseInt(after) / 100)
 }
 
-function parseThaiTimetable(wb) {
+const DAY_OFFSET = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 }
+
+function getMondayOfWeek(date) {
+  const d = new Date(date)
+  const dow = d.getDay()
+  d.setDate(d.getDate() + (dow === 0 ? -6 : 1 - dow))
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+
+function parseThaiTimetableWithDates(wb, semesterStart, semesterEnd) {
   const classes = []
   let uid = 0
-  wb.SheetNames.forEach(sheetName => {
+  const firstMonday = getMondayOfWeek(semesterStart)
+  wb.SheetNames.forEach((sheetName, weekIndex) => {
+    const weekMonday = new Date(firstMonday)
+    weekMonday.setDate(firstMonday.getDate() + weekIndex * 7)
+    if (weekMonday > semesterEnd) return
     const ws  = wb.Sheets[sheetName]
     const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: false })
     let room  = null
@@ -73,6 +86,10 @@ function parseThaiTimetable(wb) {
       const dayTh = cell0.split('\n')[0].trim()
       const day   = DAY_TH[dayTh]
       if (!day) return
+      const classDate = new Date(weekMonday)
+      classDate.setDate(weekMonday.getDate() + DAY_OFFSET[day])
+      if (classDate < semesterStart || classDate > semesterEnd) return
+      const dateISO = classDate.toISOString().split('T')[0]
       Object.entries(SLOT_MAP).forEach(([colStr, [start, end]]) => {
         const col = parseInt(colStr)
         const val = row[col]
@@ -81,7 +98,7 @@ function parseThaiTimetable(wb) {
         if (!text) return
         const code = text.split(/\s+/)[0]
         if (!code) return
-        classes.push({ id: `xl-${uid++}`, day, startH: parseH(start), endH: parseH(end), code, time: `${fmtTime(start)} – ${fmtTime(end)}`, room, floor, conflict: false })
+        classes.push({ id: `xl-${uid++}`, day, date: dateISO, week: weekIndex + 1, startH: parseH(start), endH: parseH(end), code, time: `${fmtTime(start)} – ${fmtTime(end)}`, room, floor, conflict: false })
       })
     })
   })
@@ -91,7 +108,8 @@ function parseThaiTimetable(wb) {
 function detectConflicts(items) {
   items.forEach(a => { a.conflict = false; a.conflictsWith = [] })
   items.forEach((a, i) => items.forEach((b, j) => {
-    if (i !== j && a.room === b.room && a.day === b.day && a.startH < b.endH && a.endH > b.startH) {
+    const sameSlot = a.date && b.date ? a.date === b.date : a.day === b.day
+    if (i !== j && a.room === b.room && sameSlot && a.startH < b.endH && a.endH > b.startH) {
       a.conflict = true
       b.conflict = true
       if (!a.conflictsWith.some(x => x.id === b.id))
@@ -109,6 +127,8 @@ function buildClasses(source) {
   return detectConflicts(source.map(item => ({
     id:      item.id,
     day:     _DAY[item.Day] ?? item.Day,
+    date:    item.Date ?? null,
+    week:    item.Week ?? null,
     startH:  parseH(item.Start),
     endH:    parseH(item.End),
     code:    item.Course,
@@ -118,8 +138,6 @@ function buildClasses(source) {
     conflict: false,
   })))
 }
-
-const STATIC_CLASSES = buildClasses(rawSchedule)
 
 const DAY_TO_BACKEND = { Mon:'MON', Tue:'TUE', Wed:'WED', Thu:'THU', Fri:'FRI', Sat:'SAT', Sun:'SUN' }
 const DAY_FROM_BACKEND = { MON:'Mon', TUE:'Tue', WED:'Wed', THU:'Thu', FRI:'Fri', SAT:'Sat', SUN:'Sun' }
@@ -135,6 +153,8 @@ function rawFromProcessed(p) {
     id: p.id, Sheet: p.room, Raw: p.room,
     Building: parseInt(parts[0]) || 0, Floor: p.floor, Room: parseInt(parts[1]) || 0,
     Day: DAY_TO_BACKEND[p.day] || p.day.toUpperCase(),
+    Date: p.date ?? null,
+    Week: p.week ?? null,
     Start: toHHMM(p.startH), End: toHHMM(p.endH),
     Course: p.code, Span: Math.round((p.endH - p.startH) * 2),
   }
@@ -149,6 +169,7 @@ function rawFromForm(form, existingId) {
     id, Sheet: raw, Raw: raw,
     Building: parseInt(raw.split('-')[0]) || 0, Floor: floor, Room: parseInt(raw.split('-')[1]) || 0,
     Day: DAY_TO_BACKEND[form.day],
+    Date: null, Week: null,
     Start: form.start, End: form.end,
     Course: form.course.trim(), Span: Math.round((endH - startH) * 2),
   }
@@ -192,13 +213,29 @@ const DAY_COLOR = {
   Thu: '#f59e0b', Fri: '#ef4444', Sat: '#06b6d4', Sun: '#E91E8C',
 }
 
+const DAYS   = Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, '0'))
+const MONTHS = [
+  ['01','มกราคม'],['02','กุมภาพันธ์'],['03','มีนาคม'],['04','เมษายน'],
+  ['05','พฤษภาคม'],['06','มิถุนายน'],['07','กรกฎาคม'],['08','สิงหาคม'],
+  ['09','กันยายน'],['10','ตุลาคม'],['11','พฤศจิกายน'],['12','ธันวาคม'],
+]
+
 export default function ImportExcel() {
   const { toast } = useToast()
+
+  /* ── Semester state ── */
+  const [startDay,   setStartDay]   = useState('')
+  const [startMonth, setStartMonth] = useState('')
+  const [startYear,  setStartYear]  = useState('')
+  const [endDay,     setEndDay]     = useState('')
+  const [endMonth,   setEndMonth]   = useState('')
+  const [endYear,    setEndYear]    = useState('')
+
   const [dragging,     setDragging]     = useState(false)
   const [fileName,     setFileName]     = useState(null)
   const [importStatus, setImportStatus] = useState(null)
   const [importError,  setImportError]  = useState('')
-  const [rawData,      setRawData]      = useState(rawSchedule)
+  const [rawData,      setRawData]      = useState([])
   const [isModified,   setIsModified]   = useState(false)
   const [modal,        setModal]        = useState(null)   // null | 'add' | rawItem
   const [form,         setForm]         = useState(EMPTY_FORM)
@@ -211,7 +248,13 @@ export default function ImportExcel() {
   const [activeRoom,    setActiveRoom]    = useState(null)
   const [minutesBefore, setMinutesBefore] = useState(0)
   const [selectedIds,   setSelectedIds]   = useState(new Set())
-  const [expandedKeys,  setExpandedKeys]  = useState(new Set())
+  const [expandedKeys,   setExpandedKeys]   = useState(new Set())
+  const [activeWeek,     setActiveWeek]     = useState(null)
+  const [semesterMonday, setSemesterMonday] = useState(null)
+
+  const availableWeeks = useMemo(() =>
+    [...new Set(ALL_CLASSES.map(c => c.week).filter(Boolean))].sort((a, b) => a - b),
+  [ALL_CLASSES])
 
   const toggleGroupKey = (key) => setExpandedKeys(prev => {
     const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next
@@ -227,7 +270,7 @@ export default function ImportExcel() {
   }, [])
 
   const clearTable = () => {
-    setRawData(rawSchedule)
+    setRawData(null)
     setIsModified(false)
     setImportStatus(null)
     setImportError('')
@@ -235,6 +278,8 @@ export default function ImportExcel() {
     setSelectedIds(new Set())
     setActiveFloor(null)
     setActiveRoom(null)
+    setActiveWeek(null)
+    setSemesterMonday(null)
     if (fileRef.current) fileRef.current.value = ''
   }
 
@@ -294,11 +339,14 @@ export default function ImportExcel() {
   [ALL_CLASSES, activeFloor])
 
   const currentRoom    = (activeRoom && rooms.includes(activeRoom)) ? activeRoom : null
-  const visibleClasses = currentRoom
+  const _byRoom = currentRoom
     ? ALL_CLASSES.filter(s => s.room === currentRoom)
     : activeFloor != null
       ? ALL_CLASSES.filter(s => s.floor === activeFloor)
       : ALL_CLASSES
+  const visibleClasses = activeWeek !== null
+    ? _byRoom.filter(s => s.week === activeWeek || s.week == null)
+    : _byRoom
   const visibleDays    = ALL_DAYS.filter(d => activeDays.includes(d))
 
   const toggleDay = (d) =>
@@ -322,14 +370,35 @@ export default function ImportExcel() {
     const reader = new FileReader()
     reader.onload = (e) => {
       try {
-        const wb      = XLSX.read(e.target.result, { type: 'array' })
-        const classes = parseThaiTimetable(wb)
+        const wb       = XLSX.read(e.target.result, { type: 'array' })
+        const syear = parseInt(startYear), eyear = parseInt(endYear)
+        if (!syear || !eyear || syear < 1900 || eyear < 1900)
+          throw new Error('กรุณากรอกปี ค.ศ. ให้ถูกต้อง เช่น 2026')
+        const semStart = new Date(syear, parseInt(startMonth) - 1, parseInt(startDay))
+        const semEnd   = new Date(eyear,  parseInt(endMonth)  - 1, parseInt(endDay))
+        semStart.setHours(0, 0, 0, 0)
+        semEnd.setHours(23, 59, 59, 999)
+        if (isNaN(semStart.getTime()) || isNaN(semEnd.getTime()))
+          throw new Error('วันที่ไม่ถูกต้อง กรุณาตรวจสอบวันเริ่ม–ปิดภาคเรียน')
+        if (semEnd < semStart)
+          throw new Error('วันปิดภาคเรียนต้องอยู่หลังวันเริ่มภาคเรียน')
+        const monday = getMondayOfWeek(semStart)
+        setSemesterMonday(monday)
+        setActiveWeek(1)
+        const classes = parseThaiTimetableWithDates(wb, semStart, semEnd)
         if (classes.length === 0)
           throw new Error('ไม่พบข้อมูลในไฟล์ — ตรวจสอบว่าไฟล์เป็น format ตารางห้องเรียนคณะเทคโน')
         const rawItems = classes.map(rawFromProcessed)
         setRawData(rawItems)
         setIsModified(false)
         setImportStatus('ok')
+        const blob = new Blob([JSON.stringify(rawItems, null, 2)], { type: 'application/json' })
+        const url  = URL.createObjectURL(blob)
+        const a    = document.createElement('a')
+        a.href     = url
+        a.download = 'scheduleData.json'
+        a.click()
+        URL.revokeObjectURL(url)
         const fl = [...new Set(rawItems.map(c => c.Floor))].sort((a, b) => a - b)
         setActiveFloor(fl[0] ?? null)
         setActiveRoom(null)
@@ -352,54 +421,125 @@ export default function ImportExcel() {
 
   return (
     <div className="min-h-screen bg-white flex flex-col">
+      <style>{`.year-input::placeholder { color: #9ca3af !important; opacity: 1 !important; }`}</style>
       <Navbar />
 
-      <main className="flex-1 max-w-5xl mx-auto w-full px-6 py-10">
+      <main className="flex-1 w-full px-14 xl:px-26 2xl:px-48 py-10">
 
         {/* ── Page header ── */}
-        <h1 className="text-4xl font-bold text-gray-900 mb-1">นำเข้า Excel</h1>
+        <h1 className="text-4xl font-bold text-gray-900 mb-1">นำเข้าตารางเรียน</h1>
         <p className="text-gray-400 text-sm mb-8">อัพโหลดและตรวจสอบตารางเรียนสำหรับภาคการศึกษาที่กำลังจะมาถึง</p>
 
-        {/* ── Drop zone ── */}
-        <div
-          onDragOver={e => { e.preventDefault(); setDragging(true) }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={e => { e.preventDefault(); setDragging(false); handleFile(e.dataTransfer.files[0]) }}
-          onClick={() => fileRef.current?.click()}
-          className={`rounded-2xl border-2 border-dashed flex flex-col items-center py-14 mb-4 cursor-pointer transition-colors select-none ${
-            dragging        ? 'border-[#E91E8C] bg-pink-50'
-            : importStatus === 'ok'    ? 'border-green-300 bg-green-50'
-            : importStatus === 'error' ? 'border-red-300 bg-red-50'
-            : 'border-pink-200 hover:border-pink-300'
-          }`}
-        >
-          <div className={`w-14 h-14 rounded-full flex items-center justify-center mb-4 ${
-            importStatus === 'ok' ? 'bg-green-100' : importStatus === 'error' ? 'bg-red-100' : 'bg-pink-100'
-          }`}>
-            {importStatus === 'ok'      ? <CheckCircle size={26} className="text-green-500" />
-            : importStatus === 'error'  ? <AlertCircle size={26} className="text-red-400" />
-            : importStatus === 'loading'? <FileSpreadsheet size={26} style={{ color: '#E91E8C' }} className="animate-pulse" />
-            : <CloudUpload size={26} style={{ color: '#E91E8C' }} />}
+        {/* ── Semester + Drop zone ── */}
+        <div className="grid grid-cols-5 gap-6 mb-4 items-stretch">
+
+          {/* Left: Semester form */}
+          <div className="col-span-2 rounded-2xl border border-gray-200 bg-white p-6 flex flex-col gap-5">
+            <div>
+              <h2 className="text-base font-bold text-gray-800 mb-0.5">ระบุภาคการศึกษา</h2>
+              <p className="text-xs text-gray-400">เลือกช่วงเวลาเปิด–ปิดภาคเรียน</p>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">วันเริ่มภาคเรียน</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <select value={startDay} onChange={e => setStartDay(e.target.value)}
+                    className="px-2 py-2 rounded-xl border border-gray-200 text-sm outline-none focus:border-pink-400">
+                    <option value="">วัน</option>
+                    {DAYS.map(d => <option key={d} value={d}>{parseInt(d)}</option>)}
+                  </select>
+                  <select value={startMonth} onChange={e => setStartMonth(e.target.value)}
+                    className="px-2 py-2 rounded-xl border border-gray-200 text-sm outline-none focus:border-pink-400">
+                    <option value="">เดือน</option>
+                    {MONTHS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                  <input value={startYear} onChange={e => setStartYear(e.target.value)}
+                    placeholder="ปี ค.ศ."
+                    className="year-input px-2 py-2 rounded-xl border border-gray-200 text-sm outline-none focus:border-pink-400" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">วันปิดภาคเรียน</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <select value={endDay} onChange={e => setEndDay(e.target.value)}
+                    className="px-2 py-2 rounded-xl border border-gray-200 text-sm outline-none focus:border-pink-400">
+                    <option value="">วัน</option>
+                    {DAYS.map(d => <option key={d} value={d}>{parseInt(d)}</option>)}
+                  </select>
+                  <select value={endMonth} onChange={e => setEndMonth(e.target.value)}
+                    className="px-2 py-2 rounded-xl border border-gray-200 text-sm outline-none focus:border-pink-400">
+                    <option value="">เดือน</option>
+                    {MONTHS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                  <input value={endYear} onChange={e => setEndYear(e.target.value)}
+                    placeholder="ปี ค.ศ."
+                    className="year-input px-2 py-2 rounded-xl border border-gray-200 text-sm outline-none focus:border-pink-400" />
+                </div>
+              </div>
+            </div>
           </div>
-          <p className="text-lg font-semibold text-gray-800 mb-1">
-            {importStatus === 'loading' ? 'กำลังอ่านไฟล์...'
-            : importStatus === 'ok'     ? fileName
-            : importStatus === 'error'  ? (fileName ?? 'อัพโหลดไม่สำเร็จ')
-            : (fileName ?? 'วางไฟล์ที่นี่เพื่ออัพโหลด')}
-          </p>
-          {importStatus === 'ok'    && <p className="text-sm text-green-600 mb-6">โหลดสำเร็จ — {ALL_CLASSES.length} คาบเรียน</p>}
-          {importStatus === 'error' && <p className="text-sm text-red-500 mb-6">{importError}</p>}
-          {!importStatus            && <p className="text-sm text-gray-400 mb-6">รองรับ .XLSX, .XLS, .CSV</p>}
-          {importStatus === 'ok'    && <p className="text-xs text-gray-400 mb-6">คลิกเพื่อเปลี่ยนไฟล์</p>}
-          <button
-            onClick={e => { e.stopPropagation(); fileRef.current?.click() }}
-            className="flex items-center gap-2 px-7 py-3 rounded-full text-white text-sm font-semibold hover:opacity-90 transition-opacity"
-            style={{ backgroundColor: '#9B1B5A' }}
-          >
-            <FolderOpen size={16} />เลือกไฟล์
-          </button>
-          <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={e => handleFile(e.target.files[0])} />
-        </div>
+
+          {/* Right: Drop zone */}
+          {(() => {
+            const semesterReady = startDay && startMonth && startYear.trim() && endDay && endMonth && endYear.trim()
+            return (
+              <div
+                onDragOver={e => { e.preventDefault(); if (semesterReady) setDragging(true) }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={e => { e.preventDefault(); setDragging(false); if (semesterReady) handleFile(e.dataTransfer.files[0]) }}
+                onClick={() => { if (semesterReady) fileRef.current?.click() }}
+                className={`col-span-3 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center py-14 transition-colors select-none ${
+                  !semesterReady
+                    ? 'border-gray-200 bg-gray-50 cursor-not-allowed'
+                    : dragging
+                      ? 'border-[#E91E8C] bg-pink-50 cursor-pointer'
+                      : importStatus === 'ok'    ? 'border-green-300 bg-green-50 cursor-pointer'
+                      : importStatus === 'error' ? 'border-red-300 bg-red-50 cursor-pointer'
+                      : 'border-pink-200 hover:border-pink-300 cursor-pointer'
+                }`}
+              >
+                {!semesterReady ? (
+                  <>
+                    <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+                      <CloudUpload size={26} className="text-gray-300" />
+                    </div>
+                    <p className="text-base font-semibold text-gray-400 mb-1">กรุณาระบุภาคการศึกษาก่อน</p>
+                    <p className="text-sm text-gray-300">กรอกวันเริ่ม–ปิดภาคเรียนทางซ้ายให้ครบก่อนอัพโหลดไฟล์</p>
+                  </>
+                ) : (
+                  <>
+                    <div className={`w-14 h-14 rounded-full flex items-center justify-center mb-4 ${
+                      importStatus === 'ok' ? 'bg-green-100' : importStatus === 'error' ? 'bg-red-100' : 'bg-pink-100'
+                    }`}>
+                      {importStatus === 'ok'       ? <CheckCircle size={26} className="text-green-500" />
+                      : importStatus === 'error'   ? <AlertCircle size={26} className="text-red-400" />
+                      : importStatus === 'loading' ? <FileSpreadsheet size={26} style={{ color: '#E91E8C' }} className="animate-pulse" />
+                      : <CloudUpload size={26} style={{ color: '#E91E8C' }} />}
+                    </div>
+                    <p className="text-lg font-semibold text-gray-800 mb-1">
+                      {importStatus === 'loading' ? 'กำลังอ่านไฟล์...'
+                      : importStatus === 'ok'     ? fileName
+                      : importStatus === 'error'  ? (fileName ?? 'อัพโหลดไม่สำเร็จ')
+                      : (fileName ?? 'วางไฟล์ที่นี่เพื่ออัพโหลด')}
+                    </p>
+                    {importStatus === 'ok'    && <p className="text-sm text-green-600 mb-6">โหลดสำเร็จ — {ALL_CLASSES.length} คาบเรียน</p>}
+                    {importStatus === 'error' && <p className="text-sm text-red-500 mb-6">{importError}</p>}
+                    {!importStatus            && <p className="text-sm text-gray-400 mb-6">รองรับ .XLSX, .XLS, .CSV</p>}
+                    {importStatus === 'ok'    && <p className="text-xs text-gray-400 mb-6">คลิกเพื่อเปลี่ยนไฟล์</p>}
+                    <button
+                      onClick={e => { e.stopPropagation(); fileRef.current?.click() }}
+                      className="flex items-center gap-2 px-7 py-3 rounded-full text-white text-sm font-semibold hover:opacity-90 transition-opacity"
+                      style={{ backgroundColor: '#9B1B5A' }}
+                    >
+                      <FolderOpen size={16} />เลือกไฟล์
+                    </button>
+                  </>
+                )}
+                <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={e => handleFile(e.target.files[0])} />
+              </div>
+            )
+          })()}
+        </div>{/* end grid */}
 
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-3">
@@ -491,7 +631,7 @@ export default function ImportExcel() {
           <div className="flex flex-col gap-1.5 justify-end">
             <span className="text-[11px] font-semibold text-gray-400 tracking-widest uppercase invisible">-</span>
             <span className="text-sm text-gray-500 py-2">
-              <span className="font-semibold text-gray-800">{visibleClasses.length}</span> คาบเรียนสัปดาห์นี้
+              <span className="font-semibold text-gray-800">{visibleClasses.length}</span> คาบ{activeWeek !== null ? `สัปดาห์ที่ ${activeWeek}` : 'ทั้งหมด'}
             </span>
           </div>
 
@@ -527,6 +667,35 @@ export default function ImportExcel() {
             </div>
           )}
         </div>
+
+        {/* ── Week navigator ── */}
+        {availableWeeks.length > 0 && semesterMonday && (
+          <div className="flex items-center gap-2 mb-4 flex-wrap">
+            <span className="text-[11px] font-semibold text-gray-400 tracking-widest uppercase shrink-0">สัปดาห์:</span>
+            {availableWeeks.map(w => {
+              const wStart = new Date(semesterMonday)
+              wStart.setDate(semesterMonday.getDate() + (w - 1) * 7)
+              const wEnd = new Date(wStart)
+              wEnd.setDate(wStart.getDate() + 6)
+              const fmt = d => d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })
+              return (
+                <button
+                  key={w}
+                  onClick={() => setActiveWeek(w)}
+                  className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors border ${
+                    activeWeek === w ? 'text-white border-[#E91E8C]' : 'text-gray-500 border-gray-200 hover:border-pink-300'
+                  }`}
+                  style={activeWeek === w ? { backgroundColor: '#E91E8C' } : {}}
+                >
+                  {w}
+                  <span className={`font-normal ${activeWeek === w ? 'opacity-80' : 'text-gray-400'}`}>
+                    · {fmt(wStart)}–{fmt(wEnd)}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        )}
 
         {/* ── Timetable ── */}
         <div className="rounded-2xl border border-gray-100 overflow-x-auto select-none">
@@ -574,7 +743,17 @@ export default function ImportExcel() {
                   >
                     <div>
                       <span className="text-sm font-bold text-gray-800 block">{DAY_FULL[day]}</span>
-                      {isToday && <span className="text-[10px] font-semibold" style={{ color: DAY_COLOR[day] }}>วันนี้</span>}
+                      {semesterMonday && activeWeek !== null ? (() => {
+                        const d = new Date(semesterMonday)
+                        d.setDate(semesterMonday.getDate() + (activeWeek - 1) * 7 + DAY_OFFSET[day])
+                        const isThisToday = d.toDateString() === new Date().toDateString()
+                        return (
+                          <span className="text-[10px] font-semibold" style={{ color: isThisToday ? DAY_COLOR[day] : '#9ca3af' }}>
+                            {d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })}
+                            {isThisToday && ' · วันนี้'}
+                          </span>
+                        )
+                      })() : isToday && <span className="text-[10px] font-semibold" style={{ color: DAY_COLOR[day] }}>วันนี้</span>}
                     </div>
                   </div>
 
@@ -728,7 +907,7 @@ export default function ImportExcel() {
               </div>
               {/* วัน */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">วัน</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1"></label>
                 <select value={form.day} onChange={e => setForm(v => ({ ...v, day: e.target.value }))}
                   className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm outline-none focus:border-pink-400">
                   {[['Mon','จันทร์'],['Tue','อังคาร'],['Wed','พุธ'],['Thu','พฤหัสบดี'],['Fri','ศุกร์'],['Sat','เสาร์'],['Sun','อาทิตย์']].map(([v,l]) =>
@@ -781,4 +960,5 @@ export default function ImportExcel() {
     </div>
   )
 }
+
 

@@ -1,6 +1,7 @@
 
 import { NavLink } from 'react-router-dom'
 import { Building2, Upload, LayoutDashboard, Globe } from 'lucide-react'
+import spuLogo from '../assets/new_logo_spu01.png'
 
 const navItems = [
   { to: '/building',  label: 'ควบคุมอาคาร', icon: Building2,       end: false },
@@ -12,13 +13,8 @@ export default function Navbar() {
   return (
     <nav className="h-16 bg-white border-b border-gray-100 flex items-center px-6 relative z-40">
       {/* SPU Logo */}
-      <div className="flex items-end gap-2 mr-10 select-none">
-        <span className="text-3xl font-black text-gray-900 leading-none tracking-tight">SPU</span>
-        <div className="mb-0.5">
-          <div className="text-[7px] text-gray-500 leading-tight tracking-widest font-medium">SRIPATUM</div>
-          <div className="text-[7px] text-gray-500 leading-tight tracking-widest font-medium">UNIVERSITY</div>
-          <div className="h-[2px] mt-0.5 w-full rounded-full" style={{ backgroundColor: '#E91E8C' }} />
-        </div>
+      <div className="mr-10 select-none">
+        <img src={spuLogo} alt="SPU Logo" className="h-10 w-auto object-contain" />
       </div>
 
       {/* Nav links */}
