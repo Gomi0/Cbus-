@@ -6,6 +6,8 @@ import Navbar from '../components/Navbar'
 import { useToast } from '../context/ToastContext'
 
 /* ─── Constants ─── */
+const SCHEDULE_API_URL = '/api/schedule'   // เปลี่ยน URL ตรงนี้เมื่อมี backend
+
 const ALL_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const DAY_FULL = {
   Mon: 'จันทร์', Tue: 'อังคาร', Wed: 'พุธ', Thu: 'พฤหัสบดี',
@@ -30,85 +32,264 @@ const DAY_TH = {
 }
 const DAY_TH_RE = /จันทร์|อังคาร|พุธ|พฤหัสบดี|ศุกร์|เสาร์|อาทิตย์/
 
-const SLOT_MAP = {
-  1:  ['0900', '1130'],
-  3:  ['1100', '1240'],
-  4:  ['1200', '1430'],
-  5:  ['1300', '1440'],
-  7:  ['1500', '1730'],
-  9:  ['1700', '1840'],
-  10: ['1800', '2030'],
-  11: ['1900', '2040'],
-}
-
 function floorFromRoomCode(roomCode) {
   const after = String(roomCode).split('-')[1]
   if (!after) return 0
   return Math.floor(parseInt(after) / 100)
 }
 
-const DAY_OFFSET = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 }
-
-function getMondayOfWeek(date) {
-  const d = new Date(date)
-  const dow = d.getDay()
-  d.setDate(d.getDate() + (dow === 0 ? -6 : 1 - dow))
-  d.setHours(0, 0, 0, 0)
-  return d
+function parseHeaderRow(row) {
+  // Given a header row (วัน/เวลา row), extract all slots with col index and time
+  const slots = []
+  if (!row) return slots
+  for (let ci = 0; ci < row.length; ci++) {
+    const cell = row[ci]
+    if (!cell) continue
+    const s = String(cell)
+    const m = s.match(/(\d{4})-(\d{4})/)
+    if (!m) continue
+    slots.push({ col: ci, start: m[1], end: m[2] })
+  }
+  // Compute colEnd for each slot = next slot's col - 1 (to handle merged cells)
+  return slots.map((s, i) => ({
+    ...s,
+    colEnd: i + 1 < slots.length ? slots[i + 1].col - 1 : s.col + 3
+  }))
 }
 
-function parseThaiTimetableWithDates(wb, semesterStart, semesterEnd) {
+function getHeaderTimeForCol(aoa, headerMerges, headerRi, col) {
+  for (const mg of headerMerges) {
+    if (mg.s.r <= headerRi && headerRi <= mg.e.r && mg.s.c <= col && col <= mg.e.c) {
+      const cellVal = aoa[mg.s.r]?.[mg.s.c]
+      if (cellVal) return parseSlotTimeText(String(cellVal))
+    }
+  }
+  for (let c = col; c >= 1; c--) {
+    const cellVal = aoa[headerRi]?.[c]
+    if (cellVal) return parseSlotTimeText(String(cellVal))
+  }
+  return null
+}
+
+function parseSlotTimeText(text) {
+  const m = text.match(/(\d{3,4})\s*-\s*(\d{3,4})/)
+  if (!m) return null
+  return { start: m[1].padStart(4, '0'), end: m[2].padStart(4, '0') }
+}
+
+const minToHHMM = (totalMin) => {
+  const h  = Math.floor(totalMin / 60)
+  const mm = Math.round(totalMin % 60)
+  return `${String(h).padStart(2, '0')}${String(mm).padStart(2, '0')}`
+}
+
+function getSlotInfoForCol(aoa, headerMerges, headerRi, col) {
+  for (const mg of headerMerges) {
+    if (mg.s.r <= headerRi && headerRi <= mg.e.r && mg.s.c <= col && col <= mg.e.c) {
+      const cellVal = aoa[mg.s.r]?.[mg.s.c]
+      if (cellVal) {
+        const time = parseSlotTimeText(String(cellVal))
+        if (time) return { ...time, slotStartCol: mg.s.c, slotEndCol: mg.e.c }
+      }
+    }
+  }
+  return null
+}
+
+function subColTime(slotInfo, col) {
+  const slotStartMin = parseH(slotInfo.start) * 60
+  const slotEndMin   = parseH(slotInfo.end)   * 60
+  const slotCols     = slotInfo.slotEndCol - slotInfo.slotStartCol + 1
+  const minPerCol    = (slotEndMin - slotStartMin) / slotCols
+  const offset       = col - slotInfo.slotStartCol
+  const startMin     = slotStartMin + offset * minPerCol
+  return { start: minToHHMM(startMin), end: minToHHMM(startMin + minPerCol) }
+}
+
+function singleColTime(aoa, allMerges, headerRowIndices, nearestHeaderRi, col) {
+  // Prefer header where col is the first column of a slot (clean boundary)
+  for (const hri of headerRowIndices) {
+    const info = getSlotInfoForCol(aoa, allMerges, hri, col)
+    if (info && info.slotStartCol === col) return subColTime(info, col)
+  }
+  const fallback = getSlotInfoForCol(aoa, allMerges, nearestHeaderRi, col)
+  return fallback ? subColTime(fallback, col) : null
+}
+
+function parseThaiTimetableWithDates(wb, holidaySet = new Set()) {
   const classes = []
   let uid = 0
-  const firstMonday = getMondayOfWeek(semesterStart)
-  wb.SheetNames.forEach((sheetName, weekIndex) => {
-    const weekMonday = new Date(firstMonday)
-    weekMonday.setDate(firstMonday.getDate() + weekIndex * 7)
-    if (weekMonday > semesterEnd) return
+
+  wb.SheetNames.forEach(sheetName => {
+    const roomMatch = sheetName.match(/(\d+-\w+)/)
+    if (!roomMatch) return
+    const room = roomMatch[1]
+    const floor = floorFromRoomCode(room)
+
     const ws  = wb.Sheets[sheetName]
     const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: false })
-    let room  = null
-    for (const row of aoa) {
-      if (!row) continue
-      const hi = row.findIndex(c => c === 'ห้อง')
-      if (hi >= 0 && row[hi + 1]) { room = String(row[hi + 1]).trim(); break }
+    const merges = ws['!merges'] || []
+    const allMerges = merges
+    const mergeMap = {}
+    merges.forEach(({ s, e }) => {
+      for (let r = s.r; r <= e.r; r++) {
+        for (let c = s.c; c <= e.c; c++) {
+          mergeMap[`${r},${c}`] = { startCol: s.c, endCol: e.c }
+        }
+      }
+    })
+
+    // Build a map of rowIndex → slots for every header row (วัน/เวลา rows)
+    const headerSlotMap = {}
+    for (let ri = 0; ri < aoa.length; ri++) {
+      const row = aoa[ri]
+      if (row && String(row[0]).trim() === 'วัน/เวลา') {
+        const slots = parseHeaderRow(row)
+        if (slots.length > 0) headerSlotMap[ri] = slots
+      }
     }
-    if (!room) {
-      const m = sheetName.match(/(\d+-\d+)/)
-      room = m ? m[1] : null
-    }
-    if (!room) return
-    const floor = floorFromRoomCode(room)
-    aoa.forEach(row => {
+    if (Object.keys(headerSlotMap).length === 0) return
+    const headerRowIndices = Object.keys(headerSlotMap).map(Number).sort((a, b) => a - b)
+    // Flat colTimeMap: col → { start, end } from ALL headers combined
+    // Each col maps to the slot time of the header that "owns" that col range
+    const colTimeMap = {}
+    headerRowIndices.forEach(hri => {
+      headerSlotMap[hri].forEach(({ col, colEnd, start, end }) => {
+        for (let c = col; c <= colEnd; c++) {
+          // Only set if not already set, or if this slot's start is earlier
+          colTimeMap[c] = { start, end }
+        }
+      })
+    })
+
+    aoa.forEach((row, ri) => {
       if (!row || !row[0]) return
       const cell0 = String(row[0])
       if (!DAY_TH_RE.test(cell0)) return
       const dayTh = cell0.split('\n')[0].trim()
       const day   = DAY_TH[dayTh]
       if (!day) return
-      const classDate = new Date(weekMonday)
-      classDate.setDate(weekMonday.getDate() + DAY_OFFSET[day])
-      if (classDate < semesterStart || classDate > semesterEnd) return
-      const dateISO = classDate.toISOString().split('T')[0]
-      Object.entries(SLOT_MAP).forEach(([colStr, [start, end]]) => {
-        const col = parseInt(colStr)
-        const val = row[col]
-        if (!val) return
-        const text = String(val).trim()
-        if (!text) return
-        const code = text.split(/\s+/)[0]
-        if (!code) return
-        classes.push({ id: `xl-${uid++}`, day, date: dateISO, week: weekIndex + 1, startH: parseH(start), endH: parseH(end), code, time: `${fmtTime(start)} – ${fmtTime(end)}`, room, floor, conflict: false })
+
+      // Find nearest header row above this day row
+      const nearestHeaderRi = headerRowIndices.filter(h => h < ri).pop()
+      if (nearestHeaderRi === undefined) return
+      const activeSlots = headerSlotMap[nearestHeaderRi]
+
+      activeSlots.forEach(({ col, colEnd, start: slotStart, end: slotEnd }) => {
+        // Collect ALL non-null cells in slot range (don't break early — multiple courses per slot)
+        const found = []
+        const seenMergeStart = new Set()
+        for (let c = col; c <= colEnd; c++) {
+          if (!row[c] || !String(row[c]).trim()) continue
+          const mk = `${ri},${c}`
+          const mergeStart = mergeMap[mk] ? mergeMap[mk].startCol : c
+          if (seenMergeStart.has(mergeStart)) continue
+          seenMergeStart.add(mergeStart)
+          found.push({ val: row[c], foundCol: c })
+        }
+
+        found.forEach(({ val, foundCol }) => {
+          const text = String(val).trim()
+          if (!text) return
+          const tokens = text.split(/\s+/)
+          const code = tokens.length >= 2 ? `${tokens[0]} ${tokens[1]}` : tokens[0]
+          if (!code) return
+
+          // Determine actual start/end time using merged cell range
+          let start = slotStart
+          let end   = slotEnd
+          const mergeKey = `${ri},${foundCol}`
+          if (mergeMap[mergeKey]) {
+            const { startCol, endCol } = mergeMap[mergeKey]
+            const colSpan = endCol - startCol + 1
+            if (colSpan === 1) {
+              const t = singleColTime(aoa, allMerges, headerRowIndices, nearestHeaderRi, foundCol)
+              if (t) { start = t.start; end = t.end }
+            } else {
+              let targetHeaderRi
+              if (colSpan >= 3 && colSpan % 2 === 1 && headerRowIndices[0] !== undefined) {
+                targetHeaderRi = headerRowIndices[0]
+              } else if (colSpan >= 2 && colSpan % 2 === 0 && headerRowIndices[1] !== undefined) {
+                targetHeaderRi = headerRowIndices[1]
+              } else {
+                targetHeaderRi = nearestHeaderRi
+              }
+              // Smart start: if startCol is mid-slot in targetHeader, advance to next slot boundary
+              const startSlotInfo = getSlotInfoForCol(aoa, allMerges, targetHeaderRi, startCol)
+              if (startSlotInfo && startSlotInfo.slotStartCol === startCol) {
+                start = startSlotInfo.start
+              } else if (startSlotInfo) {
+                const nextInfo = getSlotInfoForCol(aoa, allMerges, targetHeaderRi, startSlotInfo.slotEndCol + 1)
+                if (nextInfo) start = nextInfo.start
+                else { const t = getHeaderTimeForCol(aoa, allMerges, targetHeaderRi, startCol); if (t) start = t.start }
+              } else {
+                const t = getHeaderTimeForCol(aoa, allMerges, targetHeaderRi, startCol); if (t) start = t.start
+              }
+              // Smart end: find any header where endCol is the last col of a slot (clean boundary)
+              let endSet = false
+              for (const hri of headerRowIndices) {
+                const info = getSlotInfoForCol(aoa, allMerges, hri, endCol)
+                if (info && info.slotEndCol === endCol) { end = info.end; endSet = true; break }
+              }
+              if (!endSet) { const t = getHeaderTimeForCol(aoa, allMerges, targetHeaderRi, endCol); if (t) end = t.end }
+            }
+          } else {
+            const t = singleColTime(aoa, allMerges, headerRowIndices, nearestHeaderRi, foundCol)
+            if (t) { start = t.start; end = t.end }
+          }
+
+          classes.push({ id: `xl-${uid++}`, day, date: null, week: null, startH: parseH(start), endH: parseH(end), code, time: `${fmtTime(start)} – ${fmtTime(end)}`, room, floor, conflict: false })
+        })
       })
     })
   })
-  return classes
+
+  const toHHMM = h => {
+    const hh = Math.floor(h)
+    const mm = Math.round((h - hh) * 60)
+    return `${String(hh).padStart(2,'0')}${String(mm).padStart(2,'0')}`
+  }
+
+  const groupMap = {}
+  // Group by date|room|code, then find matching slot (adjacent or overlapping)
+  const slotCountMap = {}
+  classes.forEach(c => {
+    const baseKey = `${c.date}|${c.day}|${c.room}|${c.code}`
+    let matched = null
+    let matchedKey = null
+    const count = slotCountMap[baseKey] || 0
+    for (let i = 0; i < count; i++) {
+      const k = `${baseKey}|${i}`
+      const ex = groupMap[k]
+      if (ex && c.startH <= ex.endH + 0.1 && c.endH >= ex.startH - 0.1) {
+        matched = ex
+        matchedKey = k
+        break
+      }
+    }
+    if (matched) {
+      const newStartH = Math.min(matched.startH, c.startH)
+      const newEndH   = Math.max(matched.endH,   c.endH)
+      groupMap[matchedKey] = {
+        ...matched,
+        startH: newStartH,
+        endH:   newEndH,
+        time:   `${fmtTime(toHHMM(newStartH))} – ${fmtTime(toHHMM(newEndH))}`
+      }
+    } else {
+      const idx = count
+      slotCountMap[baseKey] = idx + 1
+      const k = `${baseKey}|${idx}`
+      groupMap[k] = { ...c }
+    }
+  })
+  return Object.values(groupMap)
 }
 
 function detectConflicts(items) {
   items.forEach(a => { a.conflict = false; a.conflictsWith = [] })
   items.forEach((a, i) => items.forEach((b, j) => {
-    const sameSlot = a.date && b.date ? a.date === b.date : a.day === b.day
+    const sameSlot = a.day === b.day
     if (i !== j && a.room === b.room && sameSlot && a.startH < b.endH && a.endH > b.startH) {
       a.conflict = true
       b.conflict = true
@@ -213,24 +394,10 @@ const DAY_COLOR = {
   Thu: '#f59e0b', Fri: '#ef4444', Sat: '#06b6d4', Sun: '#E91E8C',
 }
 
-const DAYS   = Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, '0'))
-const MONTHS = [
-  ['01','มกราคม'],['02','กุมภาพันธ์'],['03','มีนาคม'],['04','เมษายน'],
-  ['05','พฤษภาคม'],['06','มิถุนายน'],['07','กรกฎาคม'],['08','สิงหาคม'],
-  ['09','กันยายน'],['10','ตุลาคม'],['11','พฤศจิกายน'],['12','ธันวาคม'],
-]
-
 export default function ImportExcel() {
   const { toast } = useToast()
 
   /* ── Semester state ── */
-  const [startDay,   setStartDay]   = useState('')
-  const [startMonth, setStartMonth] = useState('')
-  const [startYear,  setStartYear]  = useState('')
-  const [endDay,     setEndDay]     = useState('')
-  const [endMonth,   setEndMonth]   = useState('')
-  const [endYear,    setEndYear]    = useState('')
-
   const [dragging,     setDragging]     = useState(false)
   const [fileName,     setFileName]     = useState(null)
   const [importStatus, setImportStatus] = useState(null)
@@ -240,6 +407,9 @@ export default function ImportExcel() {
   const [modal,        setModal]        = useState(null)   // null | 'add' | rawItem
   const [form,         setForm]         = useState(EMPTY_FORM)
   const [submitting,   setSubmitting]   = useState(false)
+  const [conflictTooltip, setConflictTooltip] = useState(null)
+  const [showConflictPanel, setShowConflictPanel] = useState(false)
+  // { x, y, cls } — cls is the class with conflict info
 
   const ALL_CLASSES = useMemo(() => detectConflicts(buildClasses(rawData)), [rawData])
 
@@ -249,13 +419,6 @@ export default function ImportExcel() {
   const [minutesBefore, setMinutesBefore] = useState(0)
   const [selectedIds,   setSelectedIds]   = useState(new Set())
   const [expandedKeys,   setExpandedKeys]   = useState(new Set())
-  const [activeWeek,     setActiveWeek]     = useState(null)
-  const [semesterMonday, setSemesterMonday] = useState(null)
-
-  const availableWeeks = useMemo(() =>
-    [...new Set(ALL_CLASSES.map(c => c.week).filter(Boolean))].sort((a, b) => a - b),
-  [ALL_CLASSES])
-
   const toggleGroupKey = (key) => setExpandedKeys(prev => {
     const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next
   })
@@ -269,6 +432,7 @@ export default function ImportExcel() {
     return () => window.removeEventListener('mouseup', up)
   }, [])
 
+
   const clearTable = () => {
     setRawData(null)
     setIsModified(false)
@@ -278,8 +442,7 @@ export default function ImportExcel() {
     setSelectedIds(new Set())
     setActiveFloor(null)
     setActiveRoom(null)
-    setActiveWeek(null)
-    setSemesterMonday(null)
+    setShowConflictPanel(false)
     if (fileRef.current) fileRef.current.value = ''
   }
 
@@ -344,9 +507,7 @@ export default function ImportExcel() {
     : activeFloor != null
       ? ALL_CLASSES.filter(s => s.floor === activeFloor)
       : ALL_CLASSES
-  const visibleClasses = activeWeek !== null
-    ? _byRoom.filter(s => s.week === activeWeek || s.week == null)
-    : _byRoom
+  const visibleClasses = _byRoom
   const visibleDays    = ALL_DAYS.filter(d => activeDays.includes(d))
 
   const toggleDay = (d) =>
@@ -371,25 +532,12 @@ export default function ImportExcel() {
     reader.onload = (e) => {
       try {
         const wb       = XLSX.read(e.target.result, { type: 'array' })
-        const syear = parseInt(startYear), eyear = parseInt(endYear)
-        if (!syear || !eyear || syear < 1900 || eyear < 1900)
-          throw new Error('กรุณากรอกปี ค.ศ. ให้ถูกต้อง เช่น 2026')
-        const semStart = new Date(syear, parseInt(startMonth) - 1, parseInt(startDay))
-        const semEnd   = new Date(eyear,  parseInt(endMonth)  - 1, parseInt(endDay))
-        semStart.setHours(0, 0, 0, 0)
-        semEnd.setHours(23, 59, 59, 999)
-        if (isNaN(semStart.getTime()) || isNaN(semEnd.getTime()))
-          throw new Error('วันที่ไม่ถูกต้อง กรุณาตรวจสอบวันเริ่ม–ปิดภาคเรียน')
-        if (semEnd < semStart)
-          throw new Error('วันปิดภาคเรียนต้องอยู่หลังวันเริ่มภาคเรียน')
-        const monday = getMondayOfWeek(semStart)
-        setSemesterMonday(monday)
-        setActiveWeek(1)
-        const classes = parseThaiTimetableWithDates(wb, semStart, semEnd)
+        const classes = parseThaiTimetableWithDates(wb)
         if (classes.length === 0)
           throw new Error('ไม่พบข้อมูลในไฟล์ — ตรวจสอบว่าไฟล์เป็น format ตารางห้องเรียนคณะเทคโน')
         const rawItems = classes.map(rawFromProcessed)
         setRawData(rawItems)
+        setActiveDays(ALL_DAYS)
         setIsModified(false)
         setImportStatus('ok')
         const blob = new Blob([JSON.stringify(rawItems, null, 2)], { type: 'application/json' })
@@ -399,8 +547,7 @@ export default function ImportExcel() {
         a.download = 'scheduleData.json'
         a.click()
         URL.revokeObjectURL(url)
-        const fl = [...new Set(rawItems.map(c => c.Floor))].sort((a, b) => a - b)
-        setActiveFloor(fl[0] ?? null)
+        setActiveFloor(null)
         setActiveRoom(null)
         setSelectedIds(new Set())
       } catch (err) {
@@ -414,14 +561,36 @@ export default function ImportExcel() {
 
   const handleSubmit = async () => {
     if (rawData.length === 0) { toast.warning('ไม่มีข้อมูลคาบเรียน'); return }
-    toast.success('สร้างตารางเรียนสำเร็จ')
+    setSubmitting(true)
+    try {
+      // 1. ดาวน์โหลด JSON
+      const blob = new Blob([JSON.stringify(rawData, null, 2)], { type: 'application/json' })
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      a.href     = url
+      a.download = 'scheduleData.json'
+      a.click()
+      URL.revokeObjectURL(url)
+
+      // 2. POST ไป API
+      const res = await fetch(SCHEDULE_API_URL, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(rawData),
+      })
+      if (!res.ok) throw new Error(`Server responded ${res.status}`)
+      toast.success('สร้างตารางเรียนสำเร็จ')
+    } catch (err) {
+      toast.warning('ดาวน์โหลด JSON สำเร็จ — ยังไม่สามารถเชื่อมต่อ server ได้')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const conflictCount = visibleClasses.filter(c => c.conflict).length
 
   return (
     <div className="min-h-screen bg-white flex flex-col">
-      <style>{`.year-input::placeholder { color: #9ca3af !important; opacity: 1 !important; }`}</style>
       <Navbar />
 
       <main className="flex-1 w-full px-14 xl:px-26 2xl:px-48 py-10">
@@ -433,81 +602,23 @@ export default function ImportExcel() {
         {/* ── Semester + Drop zone ── */}
         <div className="grid grid-cols-5 gap-6 mb-4 items-stretch">
 
-          {/* Left: Semester form */}
-          <div className="col-span-2 rounded-2xl border border-gray-200 bg-white p-6 flex flex-col gap-5">
-            <div>
-              <h2 className="text-base font-bold text-gray-800 mb-0.5">ระบุภาคการศึกษา</h2>
-              <p className="text-xs text-gray-400">เลือกช่วงเวลาเปิด–ปิดภาคเรียน</p>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">วันเริ่มภาคเรียน</label>
-                <div className="grid grid-cols-3 gap-2">
-                  <select value={startDay} onChange={e => setStartDay(e.target.value)}
-                    className="px-2 py-2 rounded-xl border border-gray-200 text-sm outline-none focus:border-pink-400">
-                    <option value="">วัน</option>
-                    {DAYS.map(d => <option key={d} value={d}>{parseInt(d)}</option>)}
-                  </select>
-                  <select value={startMonth} onChange={e => setStartMonth(e.target.value)}
-                    className="px-2 py-2 rounded-xl border border-gray-200 text-sm outline-none focus:border-pink-400">
-                    <option value="">เดือน</option>
-                    {MONTHS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                  </select>
-                  <input value={startYear} onChange={e => setStartYear(e.target.value)}
-                    placeholder="ปี ค.ศ."
-                    className="year-input px-2 py-2 rounded-xl border border-gray-200 text-sm outline-none focus:border-pink-400" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">วันปิดภาคเรียน</label>
-                <div className="grid grid-cols-3 gap-2">
-                  <select value={endDay} onChange={e => setEndDay(e.target.value)}
-                    className="px-2 py-2 rounded-xl border border-gray-200 text-sm outline-none focus:border-pink-400">
-                    <option value="">วัน</option>
-                    {DAYS.map(d => <option key={d} value={d}>{parseInt(d)}</option>)}
-                  </select>
-                  <select value={endMonth} onChange={e => setEndMonth(e.target.value)}
-                    className="px-2 py-2 rounded-xl border border-gray-200 text-sm outline-none focus:border-pink-400">
-                    <option value="">เดือน</option>
-                    {MONTHS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                  </select>
-                  <input value={endYear} onChange={e => setEndYear(e.target.value)}
-                    placeholder="ปี ค.ศ."
-                    className="year-input px-2 py-2 rounded-xl border border-gray-200 text-sm outline-none focus:border-pink-400" />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Right: Drop zone */}
+          {/* Drop zone */}
           {(() => {
-            const semesterReady = startDay && startMonth && startYear.trim() && endDay && endMonth && endYear.trim()
             return (
               <div
-                onDragOver={e => { e.preventDefault(); if (semesterReady) setDragging(true) }}
+                onDragOver={e => { e.preventDefault(); setDragging(true) }}
                 onDragLeave={() => setDragging(false)}
-                onDrop={e => { e.preventDefault(); setDragging(false); if (semesterReady) handleFile(e.dataTransfer.files[0]) }}
-                onClick={() => { if (semesterReady) fileRef.current?.click() }}
-                className={`col-span-3 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center py-14 transition-colors select-none ${
-                  !semesterReady
-                    ? 'border-gray-200 bg-gray-50 cursor-not-allowed'
-                    : dragging
+                onDrop={e => { e.preventDefault(); setDragging(false); handleFile(e.dataTransfer.files[0]) }}
+                onClick={() => fileRef.current?.click()}
+                className={`col-span-5 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center py-14 transition-colors select-none ${
+                  dragging
                       ? 'border-[#E91E8C] bg-pink-50 cursor-pointer'
                       : importStatus === 'ok'    ? 'border-green-300 bg-green-50 cursor-pointer'
                       : importStatus === 'error' ? 'border-red-300 bg-red-50 cursor-pointer'
                       : 'border-pink-200 hover:border-pink-300 cursor-pointer'
                 }`}
               >
-                {!semesterReady ? (
-                  <>
-                    <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center mb-4">
-                      <CloudUpload size={26} className="text-gray-300" />
-                    </div>
-                    <p className="text-base font-semibold text-gray-400 mb-1">กรุณาระบุภาคการศึกษาก่อน</p>
-                    <p className="text-sm text-gray-300">กรอกวันเริ่ม–ปิดภาคเรียนทางซ้ายให้ครบก่อนอัพโหลดไฟล์</p>
-                  </>
-                ) : (
-                  <>
+                <>
                     <div className={`w-14 h-14 rounded-full flex items-center justify-center mb-4 ${
                       importStatus === 'ok' ? 'bg-green-100' : importStatus === 'error' ? 'bg-red-100' : 'bg-pink-100'
                     }`}>
@@ -534,7 +645,6 @@ export default function ImportExcel() {
                       <FolderOpen size={16} />เลือกไฟล์
                     </button>
                   </>
-                )}
                 <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={e => handleFile(e.target.files[0])} />
               </div>
             )
@@ -544,9 +654,15 @@ export default function ImportExcel() {
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-3">
             {conflictCount > 0 && (
-              <span className="flex items-center gap-1.5 text-sm font-medium text-[#E91E8C]">
-                <AlertCircle size={15} />{conflictCount} ความขัดแย้งที่พบ
-              </span>
+              <button
+                onClick={() => setShowConflictPanel(true)}
+                className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border hover:opacity-80 transition-opacity"
+                style={{ color: '#E91E8C', borderColor: '#E91E8C', backgroundColor: '#fdf2f8' }}
+              >
+                <AlertCircle size={13} />
+                {conflictCount} ความขัดแย้งที่พบ
+                <span className="text-[10px] opacity-60">กดเพื่อดู</span>
+              </button>
             )}
             {(importStatus === 'ok' || isModified) && (
               <button
@@ -631,7 +747,7 @@ export default function ImportExcel() {
           <div className="flex flex-col gap-1.5 justify-end">
             <span className="text-[11px] font-semibold text-gray-400 tracking-widest uppercase invisible">-</span>
             <span className="text-sm text-gray-500 py-2">
-              <span className="font-semibold text-gray-800">{visibleClasses.length}</span> คาบ{activeWeek !== null ? `สัปดาห์ที่ ${activeWeek}` : 'ทั้งหมด'}
+              <span className="font-semibold text-gray-800">{visibleClasses.length}</span> คาบทั้งหมด
             </span>
           </div>
 
@@ -667,35 +783,6 @@ export default function ImportExcel() {
             </div>
           )}
         </div>
-
-        {/* ── Week navigator ── */}
-        {availableWeeks.length > 0 && semesterMonday && (
-          <div className="flex items-center gap-2 mb-4 flex-wrap">
-            <span className="text-[11px] font-semibold text-gray-400 tracking-widest uppercase shrink-0">สัปดาห์:</span>
-            {availableWeeks.map(w => {
-              const wStart = new Date(semesterMonday)
-              wStart.setDate(semesterMonday.getDate() + (w - 1) * 7)
-              const wEnd = new Date(wStart)
-              wEnd.setDate(wStart.getDate() + 6)
-              const fmt = d => d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })
-              return (
-                <button
-                  key={w}
-                  onClick={() => setActiveWeek(w)}
-                  className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors border ${
-                    activeWeek === w ? 'text-white border-[#E91E8C]' : 'text-gray-500 border-gray-200 hover:border-pink-300'
-                  }`}
-                  style={activeWeek === w ? { backgroundColor: '#E91E8C' } : {}}
-                >
-                  {w}
-                  <span className={`font-normal ${activeWeek === w ? 'opacity-80' : 'text-gray-400'}`}>
-                    · {fmt(wStart)}–{fmt(wEnd)}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-        )}
 
         {/* ── Timetable ── */}
         <div className="rounded-2xl border border-gray-100 overflow-x-auto select-none">
@@ -743,17 +830,7 @@ export default function ImportExcel() {
                   >
                     <div>
                       <span className="text-sm font-bold text-gray-800 block">{DAY_FULL[day]}</span>
-                      {semesterMonday && activeWeek !== null ? (() => {
-                        const d = new Date(semesterMonday)
-                        d.setDate(semesterMonday.getDate() + (activeWeek - 1) * 7 + DAY_OFFSET[day])
-                        const isThisToday = d.toDateString() === new Date().toDateString()
-                        return (
-                          <span className="text-[10px] font-semibold" style={{ color: isThisToday ? DAY_COLOR[day] : '#9ca3af' }}>
-                            {d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })}
-                            {isThisToday && ' · วันนี้'}
-                          </span>
-                        )
-                      })() : isToday && <span className="text-[10px] font-semibold" style={{ color: DAY_COLOR[day] }}>วันนี้</span>}
+                      {isToday && <span className="text-[10px] font-semibold" style={{ color: DAY_COLOR[day] }}>วันนี้</span>}
                     </div>
                   </div>
 
@@ -785,15 +862,17 @@ export default function ImportExcel() {
                           <div className="flex items-start justify-between gap-1">
                             <span className={`text-xs font-bold leading-tight truncate ${cls.conflict ? 'text-[#E91E8C]' : 'text-gray-800'}`}>{cls.code}</span>
                             {cls.conflict ? (
-                              <div className="relative shrink-0 mt-0.5 group/tip">
-                                <AlertCircle size={12} style={{ color: '#E91E8C' }} className="cursor-help" />
-                                <div className="absolute right-0 bottom-full mb-2 hidden group-hover/tip:block bg-gray-800 rounded-lg px-2.5 py-2 shadow-xl pointer-events-none" style={{ minWidth: 160, zIndex: 999 }}>
-                                  <p className="text-[10px] font-semibold text-white mb-1">ทับกับ:</p>
-                                  {(cls.conflictsWith || []).map(c => (
-                                    <p key={c.id} className="text-[10px] text-gray-300 whitespace-nowrap">{c.code} · {c.time}</p>
-                                  ))}
-                                  <div className="absolute right-1.5 top-full -mt-1 w-0 h-0" style={{ borderLeft: '5px solid transparent', borderRight: '5px solid transparent', borderTop: '5px solid #1f2937' }} />
-                                </div>
+                              <div className="shrink-0 mt-0.5">
+                                <AlertCircle
+                                  size={12}
+                                  style={{ color: '#E91E8C' }}
+                                  className="cursor-help"
+                                  onMouseEnter={e => {
+                                    const rect = e.currentTarget.getBoundingClientRect()
+                                    setConflictTooltip({ x: rect.left, y: rect.top, cls })
+                                  }}
+                                  onMouseLeave={() => setConflictTooltip(null)}
+                                />
                               </div>
                             ) : selected && <CheckCircle size={12} style={{ color: '#E91E8C' }} className="shrink-0 mt-0.5" />}
                           </div>
@@ -942,6 +1021,56 @@ export default function ImportExcel() {
                 style={{ backgroundColor: '#E91E8C' }}>
                 {modal === 'add' ? 'เพิ่ม' : 'บันทึก'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Conflict list modal */}
+      {showConflictPanel && (
+        <div
+          className="fixed inset-0 flex items-center justify-center"
+          style={{ zIndex: 1000, backgroundColor: 'rgba(0,0,0,0.3)' }}
+          onClick={() => setShowConflictPanel(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl overflow-hidden"
+            style={{ width: 360, maxHeight: '70vh', display: 'flex', flexDirection: 'column' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 bg-pink-50 border-b border-pink-100 shrink-0">
+              <span className="text-sm font-semibold text-pink-600">รายการที่ขัดแย้งกัน</span>
+              <button onClick={() => setShowConflictPanel(false)} className="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
+            </div>
+            <div className="overflow-y-auto flex-1">
+              {(() => {
+                const seen = new Set()
+                const pairs = []
+                ALL_CLASSES.filter(c => c.conflict).forEach(a => {
+                  (a.conflictsWith || []).forEach(b => {
+                    const key = [a.code, b.code].sort().join('|') + '|' + a.room
+                    if (!seen.has(key)) {
+                      seen.add(key)
+                      pairs.push({ a, b })
+                    }
+                  })
+                })
+                return pairs.map(({ a, b }) => (
+                  <div key={`${a.id}-${b.id}`} className="px-4 py-3 border-b border-gray-50 last:border-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold truncate" style={{ color: '#E91E8C' }}>{a.code}</span>
+                      <span className="text-[10px] text-gray-300 shrink-0">vs</span>
+                      <span className="text-xs font-bold truncate" style={{ color: '#E91E8C' }}>{b.code}</span>
+                    </div>
+                    <div className="text-[10px] text-gray-400 mt-0.5">
+                      {a.room === b.room
+                        ? <>ห้อง {a.room} · {a.time} / {b.time}</>
+                        : <>{a.room} ({a.time}) vs {b.room} ({b.time})</>
+                      }
+                    </div>
+                  </div>
+                ))
+              })()}
             </div>
           </div>
         </div>
