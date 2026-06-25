@@ -73,6 +73,89 @@ function fixColorMix(css) {
   return out
 }
 
+/* ─── Logical properties → physical fallbacks ──────────────────────────────
+   Chrome 50 doesn't support CSS logical properties (Chrome 87+):
+   padding-inline, padding-block, margin-inline, margin-block, inset
+ ─────────────────────────────────────────────────────────────────────────── */
+
+function fixLogicalProperties(css) {
+  // padding-inline: X  →  padding-left: X; padding-right: X
+  css = css.replace(/padding-inline\s*:\s*([^;{}]+)/g, (_, v) => {
+    v = v.trim()
+    return `padding-left:${v};padding-right:${v}`
+  })
+  // padding-block: X  →  padding-top: X; padding-bottom: X
+  css = css.replace(/padding-block\s*:\s*([^;{}]+)/g, (_, v) => {
+    v = v.trim()
+    return `padding-top:${v};padding-bottom:${v}`
+  })
+  // margin-inline: X  →  margin-left: X; margin-right: X
+  css = css.replace(/margin-inline\s*:\s*([^;{}]+)/g, (_, v) => {
+    v = v.trim()
+    return `margin-left:${v};margin-right:${v}`
+  })
+  // margin-block: X  →  margin-top: X; margin-bottom: X
+  css = css.replace(/margin-block\s*:\s*([^;{}]+)/g, (_, v) => {
+    v = v.trim()
+    return `margin-top:${v};margin-bottom:${v}`
+  })
+  // inset: X  →  top: X; right: X; bottom: X; left: X
+  css = css.replace(/\binset\s*:\s*([^;{}]+)/g, (_, v) => {
+    v = v.trim()
+    return `top:${v};right:${v};bottom:${v};left:${v}`
+  })
+  return css
+}
+
+/* ─── flex gap → margin fallback ───────────────────────────────────────────
+   Chrome 50 doesn't support gap in flex containers (Chrome 84+ only).
+   We add >*+* margin rules as fallback alongside the gap property.
+ ─────────────────────────────────────────────────────────────────────────── */
+
+function addFlexGapFallbacks(css) {
+  const additions = []
+
+  // .gap-X { gap: V } → .gap-X > * + * { margin-left: V; margin-top: V }
+  // margin-left covers flex-row (most common), margin-top covers flex-col
+  const gapRe = /\.(gap-[\w.\\]+)\{gap:([^}]+)\}/g
+  let m
+  while ((m = gapRe.exec(css)) !== null) {
+    const cls = m[1], val = m[2].trim()
+    additions.push(`.${cls}>*+*{margin-left:${val};margin-top:${val}}`)
+  }
+
+  // .gap-x-X { column-gap: V } → margin-left fallback only
+  const gapXRe = /\.(gap-x-[\w.\\]+)\{column-gap:([^}]+)\}/g
+  while ((m = gapXRe.exec(css)) !== null) {
+    const cls = m[1], val = m[2].trim()
+    additions.push(`.${cls}>*+*{margin-left:${val}}`)
+  }
+
+  // .gap-y-X { row-gap: V } → margin-top fallback only
+  const gapYRe = /\.(gap-y-[\w.\\]+)\{row-gap:([^}]+)\}/g
+  while ((m = gapYRe.exec(css)) !== null) {
+    const cls = m[1], val = m[2].trim()
+    additions.push(`.${cls}>*+*{margin-top:${val}}`)
+  }
+
+  // For flex-col containers, reset the margin-left added above
+  // flex-col + gap-X: override to margin-left:0, keep margin-top
+  // We do this by adding a rule that targets flex-col+gap-X combos
+  // Since utilities are separate classes, we combine them here
+  const gapVals = {}
+  const gapRe2 = /\.(gap-[\w.\\]+)\{gap:([^}]+)\}/g
+  while ((m = gapRe2.exec(css)) !== null) {
+    gapVals[m[1]] = m[2].trim()
+  }
+  for (const [cls, val] of Object.entries(gapVals)) {
+    // When flex-col is on the same element as gap-X, margin-left should be 0
+    additions.push(`.flex-col.${cls}>*+*,.flex-col >.${cls}>*+*{margin-left:0}`)
+    additions.push(`.flex-col.${cls}>*+*{margin-top:${val}}`)
+  }
+
+  return css + additions.join('')
+}
+
 function chrome50CssPlugin() {
   return {
     name: 'chrome50-css-compat',
@@ -84,6 +167,8 @@ function chrome50CssPlugin() {
         css = css.replace(/@property\s+--[\w-]+\s*\{[^}]*\}/g, '')   // strip @property
         css = unwrapLayers(css)                                         // unwrap @layer
         css = fixColorMix(css)                                          // fallback color-mix()
+        css = fixLogicalProperties(css)                                 // logical → physical
+        css = addFlexGapFallbacks(css)                                  // flex gap → margins
         asset.source = css
       }
     },
