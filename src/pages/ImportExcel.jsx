@@ -6,6 +6,8 @@ import Navbar from '../components/Navbar'
 import { useToast } from '../context/ToastContext'
 
 /* ─── Constants ─── */
+const SCHEDULE_API_URL = '/api/schedule'   // เปลี่ยน URL ตรงนี้เมื่อมี backend
+
 const ALL_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const DAY_FULL = {
   Mon: 'จันทร์', Tue: 'อังคาร', Wed: 'พุธ', Thu: 'พฤหัสบดี',
@@ -75,6 +77,45 @@ function parseSlotTimeText(text) {
   return { start: m[1].padStart(4, '0'), end: m[2].padStart(4, '0') }
 }
 
+const minToHHMM = (totalMin) => {
+  const h  = Math.floor(totalMin / 60)
+  const mm = Math.round(totalMin % 60)
+  return `${String(h).padStart(2, '0')}${String(mm).padStart(2, '0')}`
+}
+
+function getSlotInfoForCol(aoa, headerMerges, headerRi, col) {
+  for (const mg of headerMerges) {
+    if (mg.s.r <= headerRi && headerRi <= mg.e.r && mg.s.c <= col && col <= mg.e.c) {
+      const cellVal = aoa[mg.s.r]?.[mg.s.c]
+      if (cellVal) {
+        const time = parseSlotTimeText(String(cellVal))
+        if (time) return { ...time, slotStartCol: mg.s.c, slotEndCol: mg.e.c }
+      }
+    }
+  }
+  return null
+}
+
+function subColTime(slotInfo, col) {
+  const slotStartMin = parseH(slotInfo.start) * 60
+  const slotEndMin   = parseH(slotInfo.end)   * 60
+  const slotCols     = slotInfo.slotEndCol - slotInfo.slotStartCol + 1
+  const minPerCol    = (slotEndMin - slotStartMin) / slotCols
+  const offset       = col - slotInfo.slotStartCol
+  const startMin     = slotStartMin + offset * minPerCol
+  return { start: minToHHMM(startMin), end: minToHHMM(startMin + minPerCol) }
+}
+
+function singleColTime(aoa, allMerges, headerRowIndices, nearestHeaderRi, col) {
+  // Prefer header where col is the first column of a slot (clean boundary)
+  for (const hri of headerRowIndices) {
+    const info = getSlotInfoForCol(aoa, allMerges, hri, col)
+    if (info && info.slotStartCol === col) return subColTime(info, col)
+  }
+  const fallback = getSlotInfoForCol(aoa, allMerges, nearestHeaderRi, col)
+  return fallback ? subColTime(fallback, col) : null
+}
+
 function parseThaiTimetableWithDates(wb, holidaySet = new Set()) {
   const classes = []
   let uid = 0
@@ -135,41 +176,70 @@ function parseThaiTimetableWithDates(wb, holidaySet = new Set()) {
       const activeSlots = headerSlotMap[nearestHeaderRi]
 
       activeSlots.forEach(({ col, colEnd, start: slotStart, end: slotEnd }) => {
-        // Scan col..colEnd to handle merged cells shifting data
-        let val = null
-        let foundCol = col
+        // Collect ALL non-null cells in slot range (don't break early — multiple courses per slot)
+        const found = []
+        const seenMergeStart = new Set()
         for (let c = col; c <= colEnd; c++) {
-          if (row[c] && String(row[c]).trim()) { val = row[c]; foundCol = c; break }
+          if (!row[c] || !String(row[c]).trim()) continue
+          const mk = `${ri},${c}`
+          const mergeStart = mergeMap[mk] ? mergeMap[mk].startCol : c
+          if (seenMergeStart.has(mergeStart)) continue
+          seenMergeStart.add(mergeStart)
+          found.push({ val: row[c], foundCol: c })
         }
-        if (!val) return
-        const text = String(val).trim()
-        if (!text) return
-        const tokens = text.split(/\s+/)
-        const code = tokens.length >= 2 ? `${tokens[0]} ${tokens[1]}` : tokens[0]
-        if (!code) return
 
-        // Determine actual start/end time using merged cell range
-        let start = slotStart
-        let end   = slotEnd
-        const mergeKey = `${ri},${foundCol}`
-        if (mergeMap[mergeKey]) {
-          const { startCol, endCol } = mergeMap[mergeKey]
-          const colSpan = endCol - startCol + 1
-          let targetHeaderRi
-          if (colSpan % 2 === 1 && headerRowIndices[0] !== undefined) {
-            targetHeaderRi = headerRowIndices[0]
-          } else if (colSpan % 2 === 0 && headerRowIndices[1] !== undefined) {
-            targetHeaderRi = headerRowIndices[1]
+        found.forEach(({ val, foundCol }) => {
+          const text = String(val).trim()
+          if (!text) return
+          const tokens = text.split(/\s+/)
+          const code = tokens.length >= 2 ? `${tokens[0]} ${tokens[1]}` : tokens[0]
+          if (!code) return
+
+          // Determine actual start/end time using merged cell range
+          let start = slotStart
+          let end   = slotEnd
+          const mergeKey = `${ri},${foundCol}`
+          if (mergeMap[mergeKey]) {
+            const { startCol, endCol } = mergeMap[mergeKey]
+            const colSpan = endCol - startCol + 1
+            if (colSpan === 1) {
+              const t = singleColTime(aoa, allMerges, headerRowIndices, nearestHeaderRi, foundCol)
+              if (t) { start = t.start; end = t.end }
+            } else {
+              let targetHeaderRi
+              if (colSpan >= 3 && colSpan % 2 === 1 && headerRowIndices[0] !== undefined) {
+                targetHeaderRi = headerRowIndices[0]
+              } else if (colSpan >= 2 && colSpan % 2 === 0 && headerRowIndices[1] !== undefined) {
+                targetHeaderRi = headerRowIndices[1]
+              } else {
+                targetHeaderRi = nearestHeaderRi
+              }
+              // Smart start: if startCol is mid-slot in targetHeader, advance to next slot boundary
+              const startSlotInfo = getSlotInfoForCol(aoa, allMerges, targetHeaderRi, startCol)
+              if (startSlotInfo && startSlotInfo.slotStartCol === startCol) {
+                start = startSlotInfo.start
+              } else if (startSlotInfo) {
+                const nextInfo = getSlotInfoForCol(aoa, allMerges, targetHeaderRi, startSlotInfo.slotEndCol + 1)
+                if (nextInfo) start = nextInfo.start
+                else { const t = getHeaderTimeForCol(aoa, allMerges, targetHeaderRi, startCol); if (t) start = t.start }
+              } else {
+                const t = getHeaderTimeForCol(aoa, allMerges, targetHeaderRi, startCol); if (t) start = t.start
+              }
+              // Smart end: find any header where endCol is the last col of a slot (clean boundary)
+              let endSet = false
+              for (const hri of headerRowIndices) {
+                const info = getSlotInfoForCol(aoa, allMerges, hri, endCol)
+                if (info && info.slotEndCol === endCol) { end = info.end; endSet = true; break }
+              }
+              if (!endSet) { const t = getHeaderTimeForCol(aoa, allMerges, targetHeaderRi, endCol); if (t) end = t.end }
+            }
           } else {
-            targetHeaderRi = nearestHeaderRi
+            const t = singleColTime(aoa, allMerges, headerRowIndices, nearestHeaderRi, foundCol)
+            if (t) { start = t.start; end = t.end }
           }
-          const startTime = getHeaderTimeForCol(aoa, allMerges, targetHeaderRi, startCol)
-          const endTime   = getHeaderTimeForCol(aoa, allMerges, targetHeaderRi, endCol)
-          if (startTime) start = startTime.start
-          if (endTime)   end   = endTime.end
-        }
 
-        classes.push({ id: `xl-${uid++}`, day, date: null, week: null, startH: parseH(start), endH: parseH(end), code, time: `${fmtTime(start)} – ${fmtTime(end)}`, room, floor, conflict: false })
+          classes.push({ id: `xl-${uid++}`, day, date: null, week: null, startH: parseH(start), endH: parseH(end), code, time: `${fmtTime(start)} – ${fmtTime(end)}`, room, floor, conflict: false })
+        })
       })
     })
   })
@@ -184,7 +254,7 @@ function parseThaiTimetableWithDates(wb, holidaySet = new Set()) {
   // Group by date|room|code, then find matching slot (adjacent or overlapping)
   const slotCountMap = {}
   classes.forEach(c => {
-    const baseKey = `${c.date}|${c.room}|${c.code}`
+    const baseKey = `${c.date}|${c.day}|${c.room}|${c.code}`
     let matched = null
     let matchedKey = null
     const count = slotCountMap[baseKey] || 0
@@ -287,96 +357,6 @@ function rawFromForm(form, existingId) {
 }
 
 const EMPTY_FORM = { raw: '', day: 'Mon', start: '0900', end: '1100', course: '' }
-const MERGE_GAP_MIN = 30
-
-function buildRoomSessions(classes) {
-  const sorted = [...classes].sort((a, b) => a.startH - b.startH)
-  const sessions = []
-  for (const cls of sorted) {
-    const last = sessions[sessions.length - 1]
-    if (!last || cls.startH >= last.endH) {
-      sessions.push({ startH: cls.startH, endH: cls.endH })
-    } else {
-      last.endH = Math.max(last.endH, cls.endH)
-    }
-  }
-  return sessions
-}
-
-function computeTokenSchedule(classes, mergeGapMin = MERGE_GAP_MIN) {
-  const grouped = {}
-  classes.forEach(cls => {
-    const key = `${cls.room}|${cls.day}`
-    if (!grouped[key]) grouped[key] = []
-    grouped[key].push(cls)
-  })
-
-  let totalTokens = 0
-  let savedTokens = 0
-
-  Object.values(grouped).forEach(clsList => {
-    const sessions = buildRoomSessions(clsList)
-    totalTokens += sessions.length * 2
-    for (let i = 0; i + 1 < sessions.length; i++) {
-      const gapMin = (sessions[i + 1].startH - sessions[i].endH) * 60
-      if (gapMin > 0 && gapMin <= mergeGapMin) {
-        totalTokens -= 2
-        savedTokens += 2
-      }
-    }
-  })
-
-  return { totalTokens, savedTokens }
-}
-
-function buildSchedulePayload(classes, mergeGapMin, minutesBefore) {
-  const grouped = {}
-  classes.forEach(cls => {
-    const key = `${cls.room}|${cls.day}`
-    if (!grouped[key]) grouped[key] = { room: cls.room, day: cls.day, list: [] }
-    grouped[key].list.push(cls)
-  })
-
-  const schedule = []
-  Object.values(grouped).forEach(({ room, day, list }) => {
-    const sorted = [...list].sort((a, b) => a.startH - b.startH)
-
-    // merge overlapping sessions
-    const sessions = []
-    for (const cls of sorted) {
-      const last = sessions[sessions.length - 1]
-      if (!last || cls.startH >= last.endH) {
-        sessions.push({ startH: cls.startH, endH: cls.endH })
-      } else {
-        last.endH = Math.max(last.endH, cls.endH)
-      }
-    }
-
-    // merge sessions ที่ gap ≤ mergeGapMin → เปิดไฟต่อเนื่อง
-    const merged = [{ ...sessions[0] }]
-    for (let i = 1; i < sessions.length; i++) {
-      const last = merged[merged.length - 1]
-      const gapMin = (sessions[i].startH - last.endH) * 60
-      if (gapMin <= mergeGapMin) {
-        last.endH = sessions[i].endH
-      } else {
-        merged.push({ ...sessions[i] })
-      }
-    }
-
-    merged.forEach(s => {
-      const onH = Math.max(0, s.startH - minutesBefore / 60)
-      schedule.push({
-        room,
-        day: DAY_TO_BACKEND[day] ?? day.toUpperCase(),
-        on:  toHHMM(onH),
-        off: toHHMM(s.endH),
-      })
-    })
-  })
-
-  return { mergeGapMinutes: mergeGapMin, schedule }
-}
 
 function groupOverlapping(classes) {
   if (!classes.length) return []
@@ -432,7 +412,6 @@ export default function ImportExcel() {
   // { x, y, cls } — cls is the class with conflict info
 
   const ALL_CLASSES = useMemo(() => detectConflicts(buildClasses(rawData)), [rawData])
-  const tokenInfo   = useMemo(() => computeTokenSchedule(ALL_CLASSES), [ALL_CLASSES])
 
   const [activeDays,    setActiveDays]    = useState(ALL_DAYS)          // เปิดทุกวัน
   const [activeFloor,   setActiveFloor]   = useState(null)
@@ -519,11 +498,7 @@ export default function ImportExcel() {
   [ALL_CLASSES])
 
   const rooms = useMemo(() =>
-    [...new Set(ALL_CLASSES.filter(s => activeFloor == null || s.floor === activeFloor).map(s => s.room))].sort((a, b) => {
-      const [aB, aR] = a.split('-').map(Number)
-      const [bB, bR] = b.split('-').map(Number)
-      return aB !== bB ? aB - bB : aR - bR
-    }),
+    [...new Set(ALL_CLASSES.filter(s => activeFloor == null || s.floor === activeFloor).map(s => s.room))].sort(),
   [ALL_CLASSES, activeFloor])
 
   const currentRoom    = (activeRoom && rooms.includes(activeRoom)) ? activeRoom : null
@@ -565,6 +540,13 @@ export default function ImportExcel() {
         setActiveDays(ALL_DAYS)
         setIsModified(false)
         setImportStatus('ok')
+        const blob = new Blob([JSON.stringify(rawItems, null, 2)], { type: 'application/json' })
+        const url  = URL.createObjectURL(blob)
+        const a    = document.createElement('a')
+        a.href     = url
+        a.download = 'scheduleData.json'
+        a.click()
+        URL.revokeObjectURL(url)
         setActiveFloor(null)
         setActiveRoom(null)
         setSelectedIds(new Set())
@@ -581,15 +563,25 @@ export default function ImportExcel() {
     if (rawData.length === 0) { toast.warning('ไม่มีข้อมูลคาบเรียน'); return }
     setSubmitting(true)
     try {
-      const payload = buildSchedulePayload(ALL_CLASSES, MERGE_GAP_MIN, minutesBefore)
-      await fetch('/api/schedule', {
-        method: 'POST',
+      // 1. ดาวน์โหลด JSON
+      const blob = new Blob([JSON.stringify(rawData, null, 2)], { type: 'application/json' })
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      a.href     = url
+      a.download = 'scheduleData.json'
+      a.click()
+      URL.revokeObjectURL(url)
+
+      // 2. POST ไป API
+      const res = await fetch(SCHEDULE_API_URL, {
+        method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body:    JSON.stringify(rawData),
       })
+      if (!res.ok) throw new Error(`Server responded ${res.status}`)
       toast.success('สร้างตารางเรียนสำเร็จ')
-    } catch {
-      toast.error('ส่งข้อมูลไม่สำเร็จ กรุณาลองอีกครั้ง')
+    } catch (err) {
+      toast.warning('ดาวน์โหลด JSON สำเร็จ — ยังไม่สามารถเชื่อมต่อ server ได้')
     } finally {
       setSubmitting(false)
     }
@@ -846,40 +838,6 @@ export default function ImportExcel() {
                   {HOUR_LABELS.map(h => (
                     <div key={h} className="border-r border-gray-100 last:border-r-0 h-full shrink-0" style={{ width: CELL_W, minWidth: CELL_W }} />
                   ))}
-
-                  {/* Merge connectors — ใช้เฉพาะ primary card ของแต่ละ visual group */}
-                  {(() => {
-                    const byRoom = {}
-                    groups.forEach(group => {
-                      const p = group[0]
-                      if (!byRoom[p.room]) byRoom[p.room] = []
-                      byRoom[p.room].push(p)
-                    })
-                    const result = []
-                    Object.entries(byRoom).forEach(([room, primaries]) => {
-                      const sessions = buildRoomSessions(primaries)
-                      for (let i = 0; i + 1 < sessions.length; i++) {
-                        const gapMin = (sessions[i + 1].startH - sessions[i].endH) * 60
-                        if (gapMin > 0 && gapMin <= MERGE_GAP_MIN) {
-                          const fullH  = DAY_ROW_H - 16
-                          const ch     = fullH * 0.52
-                          const topOff = (fullH - ch) / 2
-                          const cx     = DAY_COL_W + (sessions[i].endH - START_HOUR) * CELL_W - 2
-                          const cw     = (sessions[i + 1].startH - sessions[i].endH) * CELL_W + 4
-                          const W = cw, H = ch
-                          const d = `M 0 0 C ${W*0.35} ${H*0.4},${W*0.65} ${H*0.4},${W} 0 L ${W} ${H} C ${W*0.65} ${H*0.6},${W*0.35} ${H*0.6},0 ${H} Z`
-                          result.push(
-                            <div key={`conn-${room}-${i}`} style={{ position: 'absolute', left: cx, top: 8 + topOff, width: cw, height: ch, pointerEvents: 'none', zIndex: 2 }}>
-                              <svg width={cw} height={ch} viewBox={`0 0 ${cw} ${ch}`}>
-                                <path d={d} fill="#3b82f6" fillOpacity="0.5" />
-                              </svg>
-                            </div>
-                          )
-                        }
-                      }
-                    })
-                    return result
-                  })()}
 
                   {/* Class cards */}
                   {groups.map(group => {
